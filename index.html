@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
+<title>頂崁工業區地籍量體</title>
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+<style>
+:root{--ink:#111;--bg:#fff;--mut:#666;--acc:#1240e0;--warn:#ff4f00;--line:#e3e6ee}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;font:15px/1.45 -apple-system,"PingFang TC","Noto Sans TC",sans-serif;color:var(--ink);overflow:hidden}
+#map{position:fixed;inset:0}
+.top{position:fixed;left:10px;right:10px;top:calc(env(safe-area-inset-top) + 10px);display:flex;gap:8px;z-index:5}
+.top input{flex:1;height:44px;border:0;border-radius:12px;padding:0 14px;font-size:16px;box-shadow:0 2px 10px #0003}
+button{height:44px;min-width:44px;border:0;border-radius:12px;background:#fff;color:var(--ink);font-size:15px;padding:0 12px;box-shadow:0 2px 10px #0002;cursor:pointer}
+button.on{background:var(--acc);color:#fff}
+button.warn{background:var(--warn);color:#fff}
+.side{position:fixed;right:10px;top:calc(env(safe-area-inset-top) + 64px);display:flex;flex-direction:column;gap:8px;z-index:5}
+.side button{font-size:13px;padding:0 8px}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--bg);border-radius:16px 16px 0 0;box-shadow:0 -4px 20px #0003;padding:8px 14px calc(env(safe-area-inset-bottom) + 12px);max-height:62vh;overflow:auto;transition:max-height .25s}
+.sheet.min{max-height:118px;overflow:hidden}
+.grip{width:44px;height:5px;border-radius:3px;background:#ccc;margin:2px auto 8px;cursor:pointer}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.row button{box-shadow:none;background:#eef2ff}
+.row button.on{background:var(--acc)}
+.row button.warn{background:var(--warn)}
+.hint{color:var(--mut);font-size:13px;margin:6px 0}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:10px 0}
+.k{background:#f4f6fb;border-radius:10px;padding:8px}
+.k b{display:block;font-size:19px;font-variant-numeric:tabular-nums}
+.k span{font-size:12px;color:var(--mut)}
+.k.big{background:var(--acc);color:#fff}.k.big span{color:#dfe6ff}
+label{font-size:13px;color:var(--mut);display:block}
+select,input[type=number]{width:100%;height:40px;font-size:16px;border:1px solid var(--line);border-radius:10px;padding:0 8px;background:#fff;color:var(--ink)}
+.f{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px}
+h3{margin:12px 0 4px;font-size:15px}
+.info{font-size:14px;background:#f4f6fb;border-radius:10px;padding:8px 10px;margin-top:8px}
+a{color:var(--acc)}
+.note{font-size:12px;color:var(--mut);margin-top:10px}
+.maplibregl-ctrl-bottom-right{bottom:120px}
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div class="top">
+  <input id="q" placeholder="搜尋地址或地標（例：三重區光復路一段、中興北街）" enterkeyhint="search">
+  <button id="gps" title="定位">◎</button>
+</div>
+
+<div class="side">
+  <button id="b3d" class="on">3D</button>
+  <button id="bBase">正射影像</button>
+  <button id="bCad" class="on">地籍</button>
+  <button id="bSect" class="on">段籍</button>
+  <button id="bBld" class="on">建物</button>
+</div>
+
+<div class="sheet" id="sheet">
+  <div class="grip" id="grip"></div>
+  <div class="row">
+    <button id="draw">✎ 描繪土地</button>
+    <button id="undo">↶ 復原</button>
+    <button id="front">臨路邊</button>
+    <button id="clear">清除</button>
+  </div>
+  <div class="hint" id="hint">已載入國土測繪中心地籍圖（放大到 15 級以上顯示地號界線）。點地圖查地段；按「描繪土地」沿地籍線點轉角即可計算。</div>
+
+  <div class="grid">
+    <div class="k"><span>基地面積</span><b id="oArea">—</b><span id="oPing"></span></div>
+    <div class="k"><span>面寬</span><b id="oW">—</b><span>臨路方向</span></div>
+    <div class="k"><span>深度</span><b id="oD">—</b><span>垂直臨路</span></div>
+    <div class="k"><span>最大建築面積</span><b id="oBA">—</b><span id="oBAp"></span></div>
+    <div class="k big"><span>容積樓地板</span><b id="oFA">—</b><span id="oFAp"></span></div>
+    <div class="k"><span>估計樓層／高度</span><b id="oFl">—</b><span id="oH"></span></div>
+  </div>
+
+  <h3>使用分區與量體參數</h3>
+  <div class="f">
+    <div><label>使用分區（三重頂崁工業區）</label><select id="zone"></select></div>
+    <div><label>面前道路寬度 m</label><input id="road" type="number" value="8" step="0.5" inputmode="decimal"><label id="roadNote" style="color:#ff4f00"></label></div>
+    <div><label>容積獎勵 %（都更／危老等）</label><input id="bonus" type="number" value="0" min="0" step="5" inputmode="decimal"></div>
+    <div><label>建蔽率 %</label><input id="bcr" type="number" inputmode="decimal"></div>
+    <div><label>容積率 %</label><input id="far" type="number" inputmode="decimal"></div>
+    <div><label>每層高度 m</label><input id="fh" type="number" value="3.3" step="0.1" inputmode="decimal"></div>
+    <div><label>不計容比例 %（陽台梯廳等，估總樓地板）</label><input id="extra" type="number" value="15" step="1" inputmode="decimal"></div>
+  </div>
+  <div class="info" id="oTotal">總樓地板（含不計容）估計：—</div>
+
+  <h3>點選資訊</h3>
+  <div class="info" id="pick">尚未點選</div>
+
+  <div class="note">
+    段籍圖、電子地圖、正射影像與地段查詢：內政部國土測繪中心（政府資料開放授權）。3D 建物：OpenStreetMap / OpenFreeMap，高度為志工資料，部分建物可能缺漏或不準。
+    本工具僅為規劃初估，未計入退縮、高度限制、斜線限制、停車、法定空地配置等；實際地號界線與分區請以
+    <a href="https://easymap.moi.gov.tw/" target="_blank" rel="noopener">地籍圖資網路便民服務系統</a>及各縣市都市計畫查詢為準。
+  </div>
+</div>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script>
+{
+// 新北市三重區 頂崁工業區（重工4區）分區：[名稱, 建蔽率, 容積率, 面前道路未滿8米時容積率, 類型]
+const ZONES=[
+ ['乙種工業區',60,210,210,'ind'],
+ ['乙種工業區（再發展區）',60,140,140,'ind'],
+ ['商業區（重新路沿線）',80,440,320,'com'],
+ ['住宅區（光復路一段部分）',50,300,200,'res'],
+ ['自訂',60,210,210,'custom']
+];
+const $=id=>document.getElementById(id);
+const zoneSel=$('zone');
+zoneSel.innerHTML=ZONES.map((z,i)=>`<option value="${i}">${z[0]}（建蔽${z[1]}%／容積${z[2]}%）</option>`).join('');
+zoneSel.value=0;
+// 依面前道路寬度套用三重規定：未滿8米降容積；商業區容積另不得超過「最寬道路寬度×50%」（最低300%）
+const setZone=()=>{const z=ZONES[+zoneSel.value];if(z[4]==='custom')return;const w=+$('road').value||0;
+  let far=w>0&&w<8?z[3]:z[2];
+  if(z[4]==='com'&&w>0)far=Math.min(far,Math.max(300,w*50));
+  $('bcr').value=z[1];$('far').value=far;
+  $('roadNote').textContent=w>0&&w<8?'面前道路未滿 8 米，容積率已調降':(z[4]==='com'&&w*50<z[2]&&w>0?'商業區容積受道路寬度×50% 限制':'');};
+setZone();
+
+const NLSC=l=>[`https://wmts.nlsc.gov.tw/wmts/${l}/default/GoogleMapsCompatible/{z}/{y}/{x}`];
+const BASES=['photo','emap','esri'];const BASENAME={emap:'電子地圖',photo:'正射影像',esri:'衛星(Esri)'};
+let baseIdx=0;
+
+const map=new maplibregl.Map({
+  container:'map',center:[121.4625,25.0705],zoom:17.5,pitch:55,bearing:-20,maxPitch:75,
+  style:{version:8,
+    sources:{
+      emap:{type:'raster',tiles:NLSC('EMAP'),tileSize:256,maxzoom:19,attribution:'© 內政部國土測繪中心'},
+      photo:{type:'raster',tiles:NLSC('PHOTO2'),tileSize:256,maxzoom:19,attribution:'© 內政部國土測繪中心'},
+      esri:{type:'raster',tiles:['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],tileSize:256,maxzoom:19,attribution:'© Esri'},
+      sect:{type:'raster',tiles:NLSC('LANDSECT'),tileSize:256,maxzoom:19},
+      dmaps:{type:'raster',tiles:NLSC('DMAPS'),tileSize:256,maxzoom:19,attribution:'地籍圖 © 內政部國土測繪中心'},
+      omt:{type:'vector',url:'https://tiles.openfreemap.org/planet',attribution:'© OpenStreetMap, OpenFreeMap'},
+      parcel:{type:'geojson',data:fc([])},
+      pts:{type:'geojson',data:fc([])},
+      mass:{type:'geojson',data:fc([])},
+      sel:{type:'geojson',data:fc([])}
+    },
+    layers:[
+      {id:'emap',type:'raster',source:'emap',layout:{visibility:'none'}},
+      {id:'photo',type:'raster',source:'photo'},
+      {id:'esri',type:'raster',source:'esri',layout:{visibility:'none'}},
+      {id:'sect',type:'raster',source:'sect',paint:{'raster-opacity':.9}},
+      {id:'dmaps',type:'raster',source:'dmaps',minzoom:15,paint:{'raster-opacity':1}},
+      {id:'bld',type:'fill-extrusion',source:'omt','source-layer':'building',minzoom:14,
+        paint:{'fill-extrusion-color':'#c9ced8','fill-extrusion-opacity':.82,
+          'fill-extrusion-height':['coalesce',['get','render_height'],6],
+          'fill-extrusion-base':['coalesce',['get','render_min_height'],0]}},
+      {id:'sel',type:'fill-extrusion',source:'sel',paint:{'fill-extrusion-color':'#ffb000','fill-extrusion-opacity':.9,
+          'fill-extrusion-height':['get','h'],'fill-extrusion-base':['get','b']}},
+      {id:'parcel-f',type:'fill',source:'parcel',paint:{'fill-color':'#1240e0','fill-opacity':.18}},
+      {id:'parcel-l',type:'line',source:'parcel',paint:{'line-color':['case',['==',['get','front'],1],'#ff4f00','#1240e0'],'line-width':['case',['==',['get','front'],1],6,3]}},
+      {id:'mass',type:'fill-extrusion',source:'mass',paint:{'fill-extrusion-color':'#1240e0','fill-extrusion-opacity':.55,'fill-extrusion-height':['get','h']}},
+      {id:'pts',type:'circle',source:'pts',paint:{'circle-radius':7,'circle-color':'#fff','circle-stroke-color':'#1240e0','circle-stroke-width':3}}
+    ]}
+});
+map.addControl(new maplibregl.NavigationControl({visualizePitch:true}),'bottom-right');
+map.addControl(new maplibregl.ScaleControl({unit:'metric'}),'bottom-left');
+
+function fc(f){return{type:'FeatureCollection',features:f}}
+
+// ---- 幾何工具（以基地中心做局部平面座標，單位公尺）
+function toXY(pts){
+  const lat0=pts.reduce((s,p)=>s+p[1],0)/pts.length, lng0=pts.reduce((s,p)=>s+p[0],0)/pts.length;
+  const kx=111320*Math.cos(lat0*Math.PI/180), ky=110574;
+  return {xy:pts.map(p=>[(p[0]-lng0)*kx,(p[1]-lat0)*ky]),back:([x,y])=>[x/kx+lng0,y/ky+lat0]};
+}
+function area(xy){let a=0;for(let i=0;i<xy.length;i++){const [x1,y1]=xy[i],[x2,y2]=xy[(i+1)%xy.length];a+=x1*y2-x2*y1}return Math.abs(a)/2}
+function centroid(xy){let cx=0,cy=0,a=0;for(let i=0;i<xy.length;i++){const [x1,y1]=xy[i],[x2,y2]=xy[(i+1)%xy.length];const c=x1*y2-x2*y1;a+=c;cx+=(x1+x2)*c;cy+=(y1+y2)*c}a/=2;return a?[cx/(6*a),cy/(6*a)]:xy[0]}
+function extent(xy,ux,uy){let mn=1e9,mx=-1e9;for(const [x,y] of xy){const d=x*ux+y*uy;mn=Math.min(mn,d);mx=Math.max(mx,d)}return mx-mn}
+// 預設臨路邊：最小外接矩形中較短邊方向上最長的那條邊
+function guessFront(xy){
+  let best=null;
+  for(let i=0;i<xy.length;i++){const [x1,y1]=xy[i],[x2,y2]=xy[(i+1)%xy.length];const L=Math.hypot(x2-x1,y2-y1)||1;const ux=(x2-x1)/L,uy=(y2-y1)/L;
+    const w=extent(xy,ux,uy),d=extent(xy,-uy,ux);if(!best||w*d<best.a)best={a:w*d,ux,uy,w,d}}
+  const shortDir=best.w<=best.d?[best.ux,best.uy]:[-best.uy,best.ux];
+  let fi=0,fl=-1;
+  for(let i=0;i<xy.length;i++){const [x1,y1]=xy[i],[x2,y2]=xy[(i+1)%xy.length];const L=Math.hypot(x2-x1,y2-y1);const par=Math.abs(((x2-x1)*shortDir[0]+(y2-y1)*shortDir[1])/(L||1));if(par>.7&&L>fl){fl=L;fi=i}}
+  return fi;
+}
+
+// ---- 狀態
+let pts=[],drawing=false,front=0,frontManual=false;
+const n=v=>v.toLocaleString('zh-TW',{maximumFractionDigits:1});
+const P=v=>n(v*0.3025)+' 坪';
+
+function update(){
+  map.getSource('pts').setData(fc(pts.map(p=>({type:'Feature',geometry:{type:'Point',coordinates:p},properties:{}}))));
+  const edges=[];
+  if(pts.length>=2){
+    const m=drawing?pts.length-1:pts.length;
+    for(let i=0;i<m;i++)edges.push({type:'Feature',properties:{front:(!drawing&&i===front)?1:0},geometry:{type:'LineString',coordinates:[pts[i],pts[(i+1)%pts.length]]}});
+  }
+  const poly=pts.length>=3&&!drawing?[{type:'Feature',properties:{},geometry:{type:'Polygon',coordinates:[[...pts,pts[0]]]}}]:[];
+  map.getSource('parcel').setData(fc([...edges,...poly]));
+  calc();
+}
+
+function calc(){
+  const ids=['oArea','oW','oD','oBA','oFA','oFl'];
+  if(pts.length<3||drawing){ids.forEach(i=>$(i).textContent='—');['oPing','oBAp','oFAp','oH'].forEach(i=>$(i).textContent='');$('oTotal').textContent='總樓地板（含不計容）估計：—';map.getSource('mass').setData(fc([]));return}
+  const {xy,back}=toXY(pts);
+  if(!frontManual)front=guessFront(xy);
+  const A=area(xy);
+  const [x1,y1]=xy[front],[x2,y2]=xy[(front+1)%xy.length];const L=Math.hypot(x2-x1,y2-y1)||1;const ux=(x2-x1)/L,uy=(y2-y1)/L;
+  const W=extent(xy,ux,uy),D=extent(xy,-uy,ux);
+  const bcr=(+$('bcr').value||0)/100,far=(+$('far').value||0)/100,bonus=(+$('bonus').value||0)/100,fh=+$('fh').value||3.3,ex=(+$('extra').value||0)/100;
+  const BA=A*bcr,FA=A*far*(1+bonus);
+  const fl=BA>0?Math.ceil(FA/BA-1e-9):0,H=fl*fh;
+  $('oArea').textContent=n(A)+' m²';$('oPing').textContent=P(A);
+  $('oW').textContent=n(W)+' m';$('oD').textContent=n(D)+' m';
+  $('oBA').textContent=n(BA)+' m²';$('oBAp').textContent=P(BA);
+  $('oFA').textContent=n(FA)+' m²';$('oFAp').textContent=P(FA);
+  $('oFl').textContent=fl+' 層';$('oH').textContent='約 '+n(H)+' m';
+  $('oTotal').textContent=`總樓地板（含不計容 ${Math.round(ex*100)}%）估計：${n(FA*(1+ex))} m²（${P(FA*(1+ex))}）`;
+  // 量體：以重心等比縮放，使投影面積 = 最大建築面積
+  const c=centroid(xy),k=Math.sqrt(bcr);
+  const ring=xy.map(([x,y])=>back([c[0]+(x-c[0])*k,c[1]+(y-c[1])*k]));ring.push(ring[0]);
+  map.getSource('mass').setData(fc([{type:'Feature',properties:{h:H},geometry:{type:'Polygon',coordinates:[ring]}}]));
+}
+
+// ---- 互動
+map.on('click',async e=>{
+  const ll=[e.lngLat.lng,e.lngLat.lat];
+  if(drawing){pts.push(ll);update();return}
+  const f=map.queryRenderedFeatures(e.point,{layers:['bld']})[0];
+  let html='';
+  if(f){
+    const h=f.properties.render_height,b=f.properties.render_min_height||0;
+    let a=0;try{const ring=f.geometry.type==='Polygon'?f.geometry.coordinates[0]:f.geometry.coordinates[0][0];a=area(toXY(ring.slice(0,-1)).xy)}catch(_){}
+    map.getSource('sel').setData(fc([{type:'Feature',properties:{h:h||6,b},geometry:f.geometry}]));
+    html+=`<b>現況建物</b>：高度約 ${h?n(h)+' m（約 '+Math.max(1,Math.round(h/3.2))+' 層）':'無資料'}，`+
+          `${f.properties.levels?'登錄樓層 '+f.properties.levels+'，':''}投影面積約 ${a?n(a)+' m²（'+P(a)+'）':'—'}<br>`;
+  }else map.getSource('sel').setData(fc([]));
+  $('pick').innerHTML=html+'查詢地段中…';
+  const sect=await querySect(ll);
+  $('pick').innerHTML=html+sect+`<br><span style="font-size:12px;color:#666">坐標 ${ll[1].toFixed(6)}, ${ll[0].toFixed(6)}</span>`;
+});
+
+async function querySect([lng,lat]){
+  try{
+    const r=await fetch(`https://api.nlsc.gov.tw/other/TownVillagePointQuery/${lng}/${lat}/4326`);
+    const t=await r.text();const d=new DOMParser().parseFromString(t,'text/xml');
+    const g=k=>d.getElementsByTagName(k)[0]?.textContent||'';
+    if(!g('ctyName'))return '此處查無地段資料';
+    return `<b>${g('ctyName')}${g('townName')}</b>　${g('sectName')}段（段代碼 ${g('sectCode')}）<br>${g('officeName')}　${g('villageName')}`;
+  }catch(_){return '地段查詢失敗（國土測繪中心 API 無回應或被瀏覽器阻擋）'}
+}
+
+$('draw').onclick=()=>{
+  if(!drawing){pts=[];front=0;frontManual=false;drawing=true;$('draw').textContent='✓ 完成';$('draw').classList.add('warn');$('hint').textContent='依序點土地的每個轉角，至少 3 點，完成後按「✓ 完成」。可放大到 19 級並切換正射影像比對。'}
+  else{drawing=false;$('draw').textContent='✎ 描繪土地';$('draw').classList.remove('warn');$('hint').textContent=pts.length>=3?'橘色粗線為臨路邊，按「臨路邊」可切換，面寬／深度會隨之重算。':'點數不足，請重新描繪。'}
+  update();
+};
+$('undo').onclick=()=>{pts.pop();update()};
+$('clear').onclick=()=>{pts=[];drawing=false;$('draw').textContent='✎ 描繪土地';$('draw').classList.remove('warn');map.getSource('sel').setData(fc([]));update()};
+$('front').onclick=()=>{if(pts.length>=3&&!drawing){front=(front+1)%pts.length;frontManual=true;update()}};
+zoneSel.onchange=()=>{setZone();calc()};
+$('road').oninput=()=>{setZone();calc()};
+$('bcr').addEventListener('input',()=>{zoneSel.value=ZONES.length-1});$('far').addEventListener('input',()=>{zoneSel.value=ZONES.length-1});
+['bcr','far','bonus','fh','extra'].forEach(i=>$(i).oninput=calc);
+
+$('b3d').onclick=()=>{const on=map.getPitch()<10;map.easeTo({pitch:on?55:0,bearing:on?-20:0});$('b3d').classList.toggle('on',on)};
+$('bBase').onclick=()=>{baseIdx=(baseIdx+1)%BASES.length;BASES.forEach((b,i)=>map.setLayoutProperty(b,'visibility',i===baseIdx?'visible':'none'));$('bBase').textContent=BASENAME[BASES[baseIdx]]};
+const tog=(btn,layer)=>{$(btn).onclick=()=>{const v=map.getLayoutProperty(layer,'visibility')!=='none';map.setLayoutProperty(layer,'visibility',v?'none':'visible');$(btn).classList.toggle('on',!v)}};
+tog('bSect','sect');tog('bCad','dmaps');tog('bBld','bld');
+$('grip').onclick=()=>$('sheet').classList.toggle('min');
+
+$('gps').onclick=()=>navigator.geolocation?.getCurrentPosition(p=>map.flyTo({center:[p.coords.longitude,p.coords.latitude],zoom:18}),()=>$('hint').textContent='無法取得定位，請允許瀏覽器使用位置。');
+
+$('q').addEventListener('keydown',async e=>{
+  if(e.key!=='Enter')return;const q=$('q').value.trim();if(!q)return;$('q').blur();
+  const m=q.match(/^\s*(\d{2}\.\d+)\s*[, ]\s*(\d{3}\.\d+)\s*$/);
+  if(m){map.flyTo({center:[+m[2],+m[1]],zoom:18.5});return}
+  try{
+    const r=await fetch('https://nominatim.openstreetmap.org/search?format=json&countrycodes=tw&limit=1&accept-language=zh-TW&q='+encodeURIComponent(/三重|新北|台北|臺北/.test(q)?q:'新北市三重區 '+q));
+    const j=await r.json();
+    if(j[0])map.flyTo({center:[+j[0].lon,+j[0].lat],zoom:18.5});else $('hint').textContent='找不到「'+q+'」，可改輸入「緯度,經度」。';
+  }catch(_){$('hint').textContent='搜尋服務無回應'}
+});
+}
+</script>
+</body>
+</html>
