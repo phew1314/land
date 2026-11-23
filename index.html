@@ -37,6 +37,7 @@ h3{margin:12px 0 4px;font-size:15px}
 .info{font-size:14px;background:#f4f6fb;border-radius:10px;padding:8px 10px;margin-top:8px}
 a{color:var(--acc)}
 .note{font-size:12px;color:var(--mut);margin-top:10px}
+.res{display:flex;flex-direction:column;gap:6px;margin-top:6px}.res button{text-align:left;height:auto;min-height:44px;padding:8px 12px;box-shadow:none;background:#f4f6fb;font-size:14px}
 .maplibregl-ctrl-bottom-right{bottom:120px}
 </style>
 </head>
@@ -44,7 +45,8 @@ a{color:var(--acc)}
 <div id="map"></div>
 
 <div class="top">
-  <input id="q" placeholder="搜尋地址或地標（例：三重區光復路一段、中興北街）" enterkeyhint="search">
+  <input id="q" type="search" placeholder="地址或地標（例：光復路二段45號）" enterkeyhint="search">
+  <button id="go" title="搜尋">搜尋</button>
   <button id="gps" title="定位">◎</button>
 </div>
 
@@ -64,6 +66,7 @@ a{color:var(--acc)}
     <button id="front">臨路邊</button>
     <button id="clear">清除</button>
   </div>
+  <div id="results" class="res"></div>
   <div class="hint" id="hint">已載入國土測繪中心地籍圖（放大到 15 級以上顯示地號界線）。點地圖查地段；按「描繪土地」沿地籍線點轉角即可計算。</div>
 
   <div class="grid">
@@ -125,7 +128,7 @@ const BASES=['photo','emap','esri'];const BASENAME={emap:'電子地圖',photo:'�
 let baseIdx=0;
 
 const map=new maplibregl.Map({
-  container:'map',center:[121.4625,25.0705],zoom:17.5,pitch:55,bearing:-20,maxPitch:75,
+  container:'map',center:[121.4705,25.0565],zoom:17.5,pitch:55,bearing:-20,maxPitch:75,
   style:{version:8,
     sources:{
       emap:{type:'raster',tiles:NLSC('EMAP'),tileSize:256,maxzoom:19,attribution:'© 內政部國土測繪中心'},
@@ -271,16 +274,38 @@ $('grip').onclick=()=>$('sheet').classList.toggle('min');
 
 $('gps').onclick=()=>navigator.geolocation?.getCurrentPosition(p=>map.flyTo({center:[p.coords.longitude,p.coords.latitude],zoom:18}),()=>$('hint').textContent='無法取得定位，請允許瀏覽器使用位置。');
 
-$('q').addEventListener('keydown',async e=>{
-  if(e.key!=='Enter')return;const q=$('q').value.trim();if(!q)return;$('q').blur();
-  const m=q.match(/^\s*(\d{2}\.\d+)\s*[, ]\s*(\d{3}\.\d+)\s*$/);
-  if(m){map.flyTo({center:[+m[2],+m[1]],zoom:18.5});return}
+let marker=null;
+const goto=(lng,lat,label)=>{map.flyTo({center:[lng,lat],zoom:18.5});
+  if(marker)marker.remove();marker=new maplibregl.Marker({color:'#ff4f00'}).setLngLat([lng,lat]).addTo(map);
+  $('results').innerHTML='';if(label)$('hint').textContent='已定位：'+label;};
+async function geocode(q){
+  const full=/(市|縣)/.test(q)?q:'新北市三重區'+q;
   try{
-    const r=await fetch('https://nominatim.openstreetmap.org/search?format=json&countrycodes=tw&limit=1&accept-language=zh-TW&q='+encodeURIComponent(/三重|新北|台北|臺北/.test(q)?q:'新北市三重區 '+q));
+    const r=await fetch('https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates?f=json&countryCode=TWN&maxLocations=5&SingleLine='+encodeURIComponent(full));
     const j=await r.json();
-    if(j[0])map.flyTo({center:[+j[0].lon,+j[0].lat],zoom:18.5});else $('hint').textContent='找不到「'+q+'」，可改輸入「緯度,經度」。';
-  }catch(_){$('hint').textContent='搜尋服務無回應'}
-});
+    const c=(j.candidates||[]).filter(c=>c.score>=75).map(c=>({name:c.address,lng:c.location.x,lat:c.location.y}));
+    if(c.length)return c;
+  }catch(_){}
+  try{
+    const r=await fetch('https://nominatim.openstreetmap.org/search?format=json&countrycodes=tw&limit=5&accept-language=zh-TW&q='+encodeURIComponent(full.replace(/\d+(號|巷|弄).*$/,'')));
+    return (await r.json()).map(x=>({name:x.display_name,lng:+x.lon,lat:+x.lat}));
+  }catch(_){return null}
+}
+async function doSearch(){
+  const q=$('q').value.trim();if(!q)return;$('q').blur();
+  const m=q.match(/^\s*(\d{2}\.\d+)\s*[, ]\s*(\d{3}\.\d+)\s*$/);
+  if(m){goto(+m[2],+m[1],q);return}
+  $('hint').textContent='搜尋中…';$('results').innerHTML='';
+  const c=await geocode(q);
+  if(c===null){$('hint').textContent='搜尋服務無回應，請稍後再試';return}
+  if(!c.length){$('hint').textContent='找不到「'+q+'」，可改輸入路名或「緯度,經度」';return}
+  if(c.length===1||c[0].name.includes(q.replace(/^.*?區/,''))){goto(c[0].lng,c[0].lat,c[0].name);return}
+  $('hint').textContent='找到多個結果，請選擇：';
+  $('results').innerHTML=c.map((x,i)=>`<button data-i="${i}">${x.name}</button>`).join('');
+  $('results').querySelectorAll('button').forEach(b=>b.onclick=()=>{const x=c[+b.dataset.i];goto(x.lng,x.lat,x.name)});
+}
+$('q').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();doSearch()}});
+$('go').onclick=doSearch;
 }
 </script>
 </body>
