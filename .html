@@ -1,0 +1,3703 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>新北市三重區光復路周邊｜3D 土地開發與地籍評估圖台</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Google Fonts: Inter & Noto Sans TC -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- Three.js r128 & OrbitControls -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      font-family: 'Inter', 'Noto Sans TC', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #090e1a;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    #canvas-container {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 0;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      outline: none;
+    }
+
+    /* High-DPI HTML Projected Labels Layer */
+    #labels-overlay {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      overflow: hidden;
+      z-index: 10;
+    }
+
+    .proj-label {
+      position: absolute;
+      top: 0;
+      left: 0;
+      transform: translate3d(-9999px, -9999px, 0);
+      will-change: transform;
+      white-space: nowrap;
+      pointer-events: none;
+      transition: opacity 0.15s ease;
+    }
+
+    /* Custom sleek scrollbar */
+    .custom-scroll::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    .custom-scroll::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.25);
+      border-radius: 9999px;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.38);
+      border-radius: 9999px;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb:hover {
+      background: rgba(148, 163, 184, 0.65);
+    }
+
+    /* Range slider styling */
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      background: transparent;
+      cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-runnable-track {
+      height: 6px;
+      border-radius: 9999px;
+      background: rgba(148, 163, 184, 0.28);
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #38bdf8;
+      border: 2px solid #ffffff;
+      margin-top: -5px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+      transition: transform 0.15s ease;
+    }
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.15);
+    }
+
+    /* GIS Command Center Glassmorphism */
+    .glass-panel {
+      background: rgba(11, 18, 33, 0.84);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      box-shadow: 0 16px 36px -6px rgba(0, 0, 0, 0.65);
+    }
+
+    .glass-card {
+      background: rgba(23, 34, 56, 0.68);
+      border: 1px solid rgba(148, 163, 184, 0.11);
+    }
+  </style>
+</head>
+<body class="text-slate-100 antialiased">
+
+  <!-- 3D WebGL Viewport -->
+  <div id="canvas-container"></div>
+
+  <!-- Crisp Vector3-Projected HTML Labels Overlay -->
+  <div id="labels-overlay"></div>
+
+  <!-- Hover Floating Tooltip -->
+  <div id="hover-tooltip" class="pointer-events-none fixed z-40 hidden">
+    <div class="glass-panel rounded-xl px-3.5 py-2.5 text-xs shadow-2xl border border-sky-400/40 min-w-[215px]">
+      <div class="flex items-center justify-between gap-2 mb-1">
+        <span id="tt-parcel-id" class="font-bold text-white text-sm tracking-wide">興穀段 0412-0000</span>
+        <span id="tt-zoning-badge" class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-500/30 text-purple-200 border border-purple-400/40">乙種工業區</span>
+      </div>
+      <div class="text-slate-300 flex items-center justify-between gap-3">
+        <span>面積：<strong id="tt-area" class="text-white">342.4 坪</strong></span>
+        <span id="tt-corner-tag" class="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-semibold hidden">角地</span>
+      </div>
+      <div class="text-slate-300 mt-1 flex items-center justify-between gap-3">
+        <span>面寬：<strong id="tt-frontage" class="text-orange-300">34.0m</strong></span>
+        <span>路寬：<strong id="tt-road" class="text-cyan-300">25.0m</strong></span>
+      </div>
+      <div class="text-[11px] text-slate-400 mt-1 truncate" id="tt-use">現況：科技廠辦大樓 (14F)</div>
+      <div class="mt-1.5 pt-1 border-t border-white/10 text-[10px] text-sky-300">
+        點擊立即檢視 3D 標尺與開發容積試算
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="fixed bottom-14 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2 pointer-events-none"></div>
+
+  <!-- Top Header Bar -->
+  <header class="fixed top-3 left-3 right-3 z-30 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+    <!-- Brand & Quick Search -->
+    <div class="glass-panel rounded-2xl px-3.5 py-2 flex items-center gap-3 pointer-events-auto max-w-full">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-sky-500 via-blue-600 to-indigo-700 flex items-center justify-center shadow-lg shrink-0 border border-sky-300/30">
+        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      </div>
+      <div class="min-w-0">
+        <div class="flex items-center gap-2">
+          <h1 class="text-sm sm:text-base font-bold text-white tracking-tight truncate">新北市三重區光復路周邊・3D 地籍開發圖台</h1>
+          <span class="hidden xl:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+            興穀段・中興段・二重段 (30 宗地)
+          </span>
+        </div>
+        <p class="text-[11px] text-slate-400 truncate">光復路一段／二段・重新路五段（先嗇宮站）・興德路・中興北街 3D 空間評估</p>
+      </div>
+
+      <!-- Quick Search Input & Parcel Dropdown -->
+      <div class="hidden lg:flex items-center gap-1.5 ml-2 pl-3 border-l border-white/10">
+        <div class="relative">
+          <input
+            id="parcel-search-input"
+            type="text"
+            placeholder="搜尋地號或路名 (如 0412、重新路)..."
+            class="bg-slate-900/85 text-xs text-white placeholder-slate-400 rounded-xl pl-8 pr-3 py-1.5 border border-white/15 focus:outline-none focus:border-sky-400 w-52 transition"
+          />
+          <svg class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z" />
+          </svg>
+        </div>
+        <select
+          id="quick-parcel-select"
+          class="bg-slate-900/85 text-xs text-slate-200 rounded-xl px-2.5 py-1.5 border border-white/15 focus:outline-none focus:border-sky-400 cursor-pointer max-w-[190px]"
+        >
+          <option value="">快速定位宗地...</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Top-Right Camera Presets & Dynamic Compass -->
+    <div class="glass-panel rounded-2xl p-1.5 flex items-center gap-1.5 pointer-events-auto ml-auto">
+      <button
+        id="btn-view-3d"
+        class="px-2.5 py-1.5 rounded-xl text-xs font-medium bg-sky-500/25 text-sky-200 border border-sky-400/40 hover:bg-sky-500/40 transition flex items-center gap-1.5"
+        title="切換至 3D 鳥瞰斜視視角"
+      >
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+        </svg>
+        <span>3D 鳥瞰視角</span>
+      </button>
+
+      <button
+        id="btn-view-2d"
+        class="px-2.5 py-1.5 rounded-xl text-xs font-medium text-slate-300 hover:bg-white/10 transition flex items-center gap-1.5"
+        title="切換至 2D 正射地籍圖視角"
+      >
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+        </svg>
+        <span>2D 正射地籍圖</span>
+      </button>
+
+      <button
+        id="btn-view-corridor"
+        class="hidden sm:flex px-2.5 py-1.5 rounded-xl text-xs font-medium text-slate-300 hover:bg-white/10 transition items-center gap-1.5"
+        title="沿光復路二段往一段與重新路五段軸線俯瞰"
+      >
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+        </svg>
+        <span>光復路軸線視角</span>
+      </button>
+
+      <!-- Live Compass Indicator -->
+      <button
+        id="btn-compass"
+        class="w-8 h-8 rounded-xl bg-slate-900/90 border border-white/15 flex items-center justify-center hover:border-sky-400/60 transition relative ml-0.5"
+        title="點擊使正北方朝上"
+      >
+        <div id="compass-needle" class="w-5 h-5 flex items-center justify-center">
+          <svg viewBox="0 0 24 24" class="w-5 h-5">
+            <polygon points="12,2 15.5,12 12,10.5 8.5,12" fill="#ef4444" />
+            <polygon points="12,22 15.5,12 12,13.5 8.5,12" fill="#94a3b8" />
+          </svg>
+        </div>
+        <span class="absolute -top-1 -right-1 text-[8px] font-bold bg-slate-800 text-red-400 px-1 rounded">N</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Mobile Left Drawer Toggle -->
+  <button
+    id="btn-toggle-left"
+    class="fixed top-20 left-3 z-30 glass-panel rounded-xl px-3 py-2 text-xs font-medium text-white flex items-center gap-1.5 hover:bg-slate-800/90 transition lg:hidden"
+  >
+    <svg class="w-4 h-4 text-sky-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+    </svg>
+    <span>圖層與篩選</span>
+  </button>
+
+  <!-- Left Floating Layer & Development Filter Panel -->
+  <aside
+    id="left-panel"
+    class="fixed top-20 left-3 bottom-11 w-[305px] sm:w-[325px] z-20 glass-panel rounded-2xl flex flex-col overflow-hidden transition-transform duration-300 -translate-x-[115%] lg:translate-x-0"
+  >
+    <!-- Panel Header -->
+    <div class="px-4 py-3 border-b border-white/10 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full bg-sky-400 animate-pulse"></span>
+        <h2 class="text-sm font-bold text-white">圖層控制與開發條件篩選</h2>
+      </div>
+      <button id="btn-close-left" class="lg:hidden text-slate-400 hover:text-white p-1 rounded-lg">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+
+    <!-- Scrollable Body -->
+    <div class="p-3.5 overflow-y-auto custom-scroll space-y-4 flex-1">
+
+      <!-- Section 1: Layer Controls & Building X-Ray Opacity -->
+      <section class="space-y-2.5">
+        <div class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+          <span>GIS 圖層與建物透視</span>
+          <span class="text-sky-400 font-normal">即時渲染</span>
+        </div>
+
+        <!-- 3D Buildings Toggle + Opacity Slider -->
+        <div class="glass-card rounded-xl p-3 space-y-2">
+          <div class="flex items-center justify-between">
+            <label class="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-200">
+              <input id="layer-buildings" type="checkbox" checked class="w-4 h-4 rounded accent-sky-500 cursor-pointer" />
+              <span>3D 實景建築模型</span>
+            </label>
+            <span id="building-opacity-val" class="text-[11px] font-semibold text-sky-300 bg-sky-500/15 px-2 py-0.5 rounded-md">100%</span>
+          </div>
+          <div class="space-y-1">
+            <div class="flex justify-between text-[10px] text-slate-400">
+              <span>建物透視度（調低可穿透建築檢視地籍線）</span>
+            </div>
+            <input id="building-opacity-slider" type="range" min="0" max="100" value="100" class="w-full" />
+          </div>
+        </div>
+
+        <!-- Zoning Overlay + Legend -->
+        <div class="glass-card rounded-xl p-3 space-y-2">
+          <label class="flex items-center justify-between cursor-pointer text-xs font-medium text-slate-200">
+            <span class="flex items-center gap-2">
+              <input id="layer-zoning" type="checkbox" checked class="w-4 h-4 rounded accent-sky-500 cursor-pointer" />
+              <span>土地使用分區著色</span>
+            </span>
+          </label>
+          <div class="grid grid-cols-2 gap-1.5 pt-1 text-[11px] text-slate-300">
+            <div class="flex items-center gap-1.5">
+              <span class="w-3 h-3 rounded-sm bg-purple-500/85 border border-purple-300/60 shrink-0"></span>
+              <span>乙種工業區 (60/210)</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="w-3 h-3 rounded-sm bg-amber-500/85 border border-amber-300/60 shrink-0"></span>
+              <span>第三種住宅 (50/240)</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="w-3 h-3 rounded-sm bg-red-500/85 border border-red-300/60 shrink-0"></span>
+              <span>第二種商業 (70/360)</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="w-3 h-3 rounded-sm bg-emerald-500/85 border border-emerald-300/60 shrink-0"></span>
+              <span>公園綠地用地</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Cadastral Lines & Labels -->
+        <div class="glass-card rounded-xl px-3 py-2.5 flex items-center justify-between">
+          <label class="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-200">
+            <input id="layer-cadastral" type="checkbox" checked class="w-4 h-4 rounded accent-sky-500 cursor-pointer" />
+            <span>地籍宗地界線與地號</span>
+          </label>
+          <span class="w-4 h-0.5 bg-amber-300 inline-block"></span>
+        </div>
+
+        <!-- Planned Roads & Width Labels -->
+        <div class="glass-card rounded-xl px-3 py-2.5 flex items-center justify-between">
+          <label class="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-200">
+            <input id="layer-roads" type="checkbox" checked class="w-4 h-4 rounded accent-sky-500 cursor-pointer" />
+            <span>計畫道路與面寬／路寬標尺</span>
+          </label>
+          <div class="flex items-center gap-1">
+            <span class="w-2.5 h-2.5 rounded-full bg-orange-400" title="面寬"></span>
+            <span class="w-2.5 h-2.5 rounded-full bg-cyan-400" title="路寬"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 2: Smart Development Filter -->
+      <section class="space-y-2.5 pt-2 border-t border-white/10">
+        <div class="flex items-center justify-between">
+          <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">開發條件篩選器</span>
+          <button id="btn-reset-filter" class="text-[11px] text-sky-400 hover:text-sky-300 transition">清除篩選</button>
+        </div>
+
+        <div class="glass-card rounded-xl p-3 space-y-3">
+          <!-- Zoning Filter -->
+          <div class="space-y-1.5">
+            <label class="text-[11px] text-slate-300 font-medium">使用分區類型</label>
+            <div class="grid grid-cols-2 gap-1.5" id="filter-zoning-group">
+              <button data-zoning="ALL" class="filter-zoning-btn py-1.5 px-2 rounded-lg text-[11px] font-semibold bg-sky-500 text-white shadow">全部分區</button>
+              <button data-zoning="乙種工業區" class="filter-zoning-btn py-1.5 px-2 rounded-lg text-[11px] font-medium bg-slate-800/85 text-slate-300 hover:bg-slate-700">乙種工業區</button>
+              <button data-zoning="住宅區" class="filter-zoning-btn py-1.5 px-2 rounded-lg text-[11px] font-medium bg-slate-800/85 text-slate-300 hover:bg-slate-700">第三種住宅區</button>
+              <button data-zoning="商業區" class="filter-zoning-btn py-1.5 px-2 rounded-lg text-[11px] font-medium bg-slate-800/85 text-slate-300 hover:bg-slate-700">第二種商業區</button>
+            </div>
+          </div>
+
+          <!-- Minimum Frontage Filter -->
+          <div class="space-y-1.5">
+            <label class="text-[11px] text-slate-300 font-medium">最小臨路面寬</label>
+            <div class="grid grid-cols-4 gap-1" id="filter-frontage-group">
+              <button data-frontage="0" class="filter-frontage-btn py-1.5 rounded-lg text-[11px] font-semibold bg-sky-500 text-white">不限</button>
+              <button data-frontage="10" class="filter-frontage-btn py-1.5 rounded-lg text-[11px] font-medium bg-slate-800/85 text-slate-300 hover:bg-slate-700">≥ 10m</button>
+              <button data-frontage="20" class="filter-frontage-btn py-1.5 rounded-lg text-[11px] font-medium bg-slate-800/85 text-slate-300 hover:bg-slate-700">≥ 20m</button>
+              <button data-frontage="30" class="filter-frontage-btn py-1.5 rounded-lg text-[11px] font-medium bg-slate-800/85 text-slate-300 hover:bg-slate-700">≥ 30m</button>
+            </div>
+          </div>
+
+          <!-- Minimum Road Width Filter -->
+          <div class="space-y-1.5">
+            <label class="text-[11px] text-slate-300 font-medium">最小計畫路寬</label>
+            <div class="grid grid-cols-4 gap-1" id="filter-road-group">
+              <button data-road="0" class="filter-road-btn py-1.5 rounded-lg text-[11px] font-semibold bg-sky-500 text-white">不限</button>
+              <button data-road="8" class="filter-road-btn py-1.5 rounded-lg text-[11px] font-medium bg-slate-800/85 text-slate-300 hover:bg-slate-700">≥ 8m</button>
+              <button data-road="15" class="filter-road-btn py-1.5 rounded-lg text-[11px] font-medium bg-slate-800/85 text-slate-300 hover:bg-slate-700">≥ 15m</button>
+              <button data-road="25" class="filter-road-btn py-1.5 rounded-lg text-[11px] font-medium bg-slate-800/85 text-slate-300 hover:bg-slate-700">≥ 25m</button>
+            </div>
+          </div>
+
+          <!-- Corner Lot Only Toggle -->
+          <div class="pt-1 flex items-center justify-between">
+            <label class="flex items-center gap-2 cursor-pointer text-xs font-medium text-amber-300">
+              <input id="filter-corner-only" type="checkbox" class="w-4 h-4 rounded accent-amber-400 cursor-pointer" />
+              <span>僅顯示角地（雙面臨路基地）</span>
+            </label>
+          </div>
+
+          <!-- Matched Results List -->
+          <div class="pt-2 border-t border-white/10">
+            <div class="flex items-center justify-between text-xs mb-2">
+              <span class="text-slate-300">符合篩選宗地：</span>
+              <span id="filter-match-count" class="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-400/30">30 筆</span>
+            </div>
+            <div id="filter-match-list" class="max-h-32 overflow-y-auto custom-scroll space-y-1 pr-1">
+              <!-- Populated dynamically -->
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 3: GeoJSON Import & Export -->
+      <section class="space-y-2 pt-2 border-t border-white/10">
+        <div class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">GeoJSON 空間圖資交換</div>
+        <div class="glass-card rounded-xl p-3 space-y-2">
+          <p class="text-[11px] text-slate-300 leading-relaxed">
+            可匯入三重區地籍 <code class="text-sky-300">.geojson</code> 圖檔自動套疊，或下載本街廓 30 筆範例 GeoJSON。
+          </p>
+          <div class="grid grid-cols-2 gap-2">
+            <label class="cursor-pointer bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white text-xs font-semibold py-2 px-2.5 rounded-xl text-center shadow transition flex items-center justify-center gap-1">
+              <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+              </svg>
+              <span>匯入 GeoJSON</span>
+              <input id="geojson-file-input" type="file" accept=".geojson,.json,application/geo+json,application/json" class="hidden" />
+            </label>
+            <button
+              id="btn-export-geojson"
+              class="py-2 px-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-white/10 transition flex items-center justify-center gap-1"
+            >
+              <svg class="w-3.5 h-3.5 shrink-0 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              <span>下載範例圖資</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </aside>
+
+  <!-- Right Floating Land Development & FAR Calculator Drawer -->
+  <aside
+    id="right-drawer"
+    class="fixed top-20 right-3 bottom-11 w-[350px] sm:w-[395px] max-w-[calc(100vw-1.5rem)] z-30 glass-panel rounded-2xl flex flex-col overflow-hidden transition-transform duration-300 translate-x-[120%]"
+  >
+    <!-- Drawer Header -->
+    <div class="px-4 py-3.5 bg-gradient-to-r from-slate-900/95 to-slate-800/85 border-b border-white/10 flex items-start justify-between gap-2">
+      <div class="space-y-1">
+        <div class="text-[11px] font-medium text-sky-300" id="detail-district">新北市三重區 興穀段</div>
+        <h2 id="detail-parcel-title" class="text-lg font-bold text-white tracking-tight">0412-0000 地號</h2>
+        <div id="detail-tags-row" class="flex flex-wrap gap-1 pt-0.5">
+          <!-- Dynamic feature tags: 角地, 臨25米主幹道, 工業區立體化潛力 -->
+        </div>
+      </div>
+      <button
+        id="btn-close-right"
+        class="p-1.5 rounded-xl bg-white/5 hover:bg-white/15 text-slate-300 hover:text-white transition shrink-0"
+        title="關閉土地開發面板"
+      >
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+
+    <!-- Drawer Scrollable Content -->
+    <div class="p-4 overflow-y-auto custom-scroll space-y-3.5 flex-1">
+
+      <!-- Area & Zoning Key Cards -->
+      <div class="grid grid-cols-2 gap-2.5">
+        <div class="glass-card rounded-xl p-3">
+          <div class="text-[11px] text-slate-400 mb-0.5">土地登記面積</div>
+          <div class="text-lg font-bold text-white leading-tight" id="detail-area-ping">342.43 坪</div>
+          <div class="text-xs text-slate-300 mt-0.5" id="detail-area-sqm">1,132.00 ㎡</div>
+        </div>
+
+        <div class="glass-card rounded-xl p-3 flex flex-col justify-between">
+          <div class="text-[11px] text-slate-400 mb-1">土地使用分區</div>
+          <div>
+            <span id="detail-zoning-pill" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-purple-500/25 text-purple-200 border border-purple-400/40">
+              <span id="detail-zoning-dot" class="w-2 h-2 rounded-full bg-purple-400"></span>
+              <span id="detail-zoning-name">乙種工業區</span>
+            </span>
+          </div>
+          <div class="text-[10px] text-slate-400 mt-1" id="detail-zone-rule">建蔽率 60% / 容積率 210%</div>
+        </div>
+      </div>
+
+      <!-- Frontage, Depth & Road Width Section -->
+      <div class="glass-card rounded-xl p-3.5 space-y-2.5 border-l-4 border-l-orange-400">
+        <div class="flex items-center justify-between">
+          <h3 class="text-xs font-bold text-white flex items-center gap-1.5">
+            <svg class="w-4 h-4 text-orange-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+            </svg>
+            <span>面寬、深度與計畫路寬明細</span>
+          </h3>
+          <span class="text-[10px] text-slate-300 bg-slate-900/80 px-2 py-0.5 rounded border border-white/10">
+            平均深度：<strong id="detail-avg-depth" class="text-white">33.3m</strong>
+          </span>
+        </div>
+
+        <div id="detail-frontage-list" class="space-y-2">
+          <!-- Dynamically populated frontage + road cards -->
+        </div>
+      </div>
+
+      <!-- Interactive Development FAR Calculator -->
+      <div class="glass-card rounded-xl p-3.5 space-y-3">
+        <div class="flex items-center justify-between">
+          <h3 class="text-xs font-bold text-white flex items-center gap-1.5">
+            <svg class="w-4 h-4 text-sky-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+            </svg>
+            <span>互動式開發容積試算器</span>
+          </h3>
+        </div>
+
+        <!-- Reward Bonus Toggles -->
+        <div class="space-y-1.5 bg-slate-900/75 p-2.5 rounded-xl border border-white/10">
+          <label class="flex items-center justify-between cursor-pointer text-xs">
+            <span class="flex items-center gap-2 text-purple-200 font-medium">
+              <input id="toggle-industrial-bonus" type="checkbox" class="w-3.5 h-3.5 rounded accent-purple-400 cursor-pointer" />
+              <span>新北市工業區立體化方案獎勵</span>
+            </span>
+            <span class="px-1.5 py-0.5 rounded bg-purple-500/25 text-purple-300 font-bold text-[10px]">+20%</span>
+          </label>
+          <label class="flex items-center justify-between cursor-pointer text-xs pt-1 border-t border-white/5">
+            <span class="flex items-center gap-2 text-amber-200 font-medium">
+              <input id="toggle-renewal-bonus" type="checkbox" class="w-3.5 h-3.5 rounded accent-amber-400 cursor-pointer" />
+              <span>都市更新／危老重建容積獎勵</span>
+            </span>
+            <span class="px-1.5 py-0.5 rounded bg-amber-500/25 text-amber-300 font-bold text-[10px]">+30%</span>
+          </label>
+        </div>
+
+        <!-- BCR & Effective FAR Badges -->
+        <div class="grid grid-cols-2 gap-2 text-xs">
+          <div class="bg-slate-900/70 rounded-lg p-2.5 border border-white/5">
+            <div class="text-[11px] text-slate-400">法定建蔽率</div>
+            <div id="detail-bcr" class="text-base font-bold text-sky-300 mt-0.5">60%</div>
+          </div>
+          <div class="bg-slate-900/70 rounded-lg p-2.5 border border-white/5">
+            <div class="text-[11px] text-slate-400">試算適用容積率</div>
+            <div id="detail-far" class="text-base font-bold text-emerald-300 mt-0.5">210%</div>
+          </div>
+        </div>
+
+        <!-- Calculated Floor Areas -->
+        <div class="space-y-2">
+          <div class="flex items-center justify-between bg-slate-900/55 rounded-lg px-3 py-2 border border-white/5">
+            <div>
+              <div class="text-[11px] text-slate-300">法定最大建築面積（單層）</div>
+              <div class="text-[10px] text-slate-400">土地面積 × 法定建蔽率</div>
+            </div>
+            <div class="text-right">
+              <div id="calc-max-footprint-ping" class="text-sm font-bold text-white">205.46 坪</div>
+              <div id="calc-max-footprint-sqm" class="text-[10px] text-slate-400">679.20 ㎡</div>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between bg-slate-900/55 rounded-lg px-3 py-2 border border-white/5">
+            <div>
+              <div class="text-[11px] text-slate-300">法定基準總容積樓地板</div>
+              <div class="text-[10px] text-slate-400">未含獎勵基準容積</div>
+            </div>
+            <div class="text-right">
+              <div id="calc-base-gfa-ping" class="text-sm font-bold text-slate-200">719.10 坪</div>
+              <div id="calc-base-gfa-sqm" class="text-[10px] text-slate-400">2,377.20 ㎡</div>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between bg-gradient-to-r from-sky-950/90 to-indigo-950/90 rounded-lg px-3 py-2.5 border border-sky-400/35">
+            <div>
+              <div class="text-[11px] text-sky-200 font-semibold" id="calc-final-gfa-label">含獎勵預估可建總坪數</div>
+              <div class="text-[10px] text-sky-300/75" id="calc-bonus-summary">目前套用基準容積 (+0%)</div>
+            </div>
+            <div class="text-right">
+              <div id="calc-final-gfa-ping" class="text-base font-bold text-sky-300">719.10 坪</div>
+              <div id="calc-final-gfa-sqm" class="text-[10px] text-sky-200/80">2,377.20 ㎡</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Existing Building & Land Valuation Info -->
+      <div class="glass-card rounded-xl p-3.5 space-y-2">
+        <h3 class="text-xs font-bold text-white flex items-center gap-1.5">
+          <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <span>地上物現況與開發評估摘要</span>
+        </h3>
+
+        <div class="divide-y divide-white/10 text-xs">
+          <div class="py-1.5 flex justify-between gap-2">
+            <span class="text-slate-400 shrink-0">現況建物用途</span>
+            <span id="detail-building-use" class="font-medium text-slate-100 text-right">科技廠辦大樓</span>
+          </div>
+          <div class="py-1.5 flex justify-between gap-2">
+            <span class="text-slate-400 shrink-0">地上／地下樓層</span>
+            <span id="detail-building-floors" class="font-medium text-slate-100">地上 14 層 / 地下 3 層</span>
+          </div>
+          <div class="py-1.5 flex justify-between gap-2">
+            <span class="text-slate-400 shrink-0">推估建物屋齡</span>
+            <span id="detail-building-age" class="font-medium text-slate-100">約 11 年</span>
+          </div>
+          <div class="py-1.5 flex justify-between gap-2">
+            <span class="text-slate-400 shrink-0">周邊行情／公告現值</span>
+            <span id="detail-land-value" class="font-semibold text-amber-300">約 68.0 萬 / 坪</span>
+          </div>
+          <div class="py-1.5 flex justify-between gap-2">
+            <span class="text-slate-400 shrink-0">開發評估建議</span>
+            <span id="detail-dev-note" class="font-medium text-emerald-300 text-right">光復路一段黃金角地・廠辦指標</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Drawer Footer Actions -->
+    <div class="p-3 border-t border-white/10 bg-slate-900/80 flex items-center gap-2">
+      <button
+        id="btn-focus-parcel"
+        class="flex-1 py-2 px-3 rounded-xl bg-sky-500 hover:bg-sky-400 text-white text-xs font-semibold transition flex items-center justify-center gap-1.5 shadow"
+      >
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+        </svg>
+        <span>拉近特寫此基地</span>
+      </button>
+      <button
+        id="btn-copy-report"
+        class="py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-white/10 transition flex items-center gap-1"
+        title="複製完整土地開發評估報告"
+      >
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+        </svg>
+        <span>複製評估摘要</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- Bottom Coordinate & Scale Status Bar -->
+  <footer class="fixed bottom-2 left-3 right-3 z-20 flex items-center justify-between gap-2 pointer-events-none">
+    <!-- Controls Hint (Desktop) -->
+    <div class="hidden xl:flex glass-panel rounded-xl px-3 py-1.5 items-center gap-3.5 text-[11px] text-slate-300 pointer-events-auto">
+      <span><strong class="text-white">左鍵拖曳</strong> 360° 旋轉傾斜</span>
+      <span><strong class="text-white">右鍵拖曳</strong> 平移地圖</span>
+      <span><strong class="text-white">滾輪</strong> 縮放視距</span>
+      <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-orange-400"></span>面寬標尺</span>
+      <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-cyan-400"></span>路寬標尺</span>
+    </div>
+
+    <!-- Real-time WGS84 & TWD97 Coordinate Display -->
+    <div class="glass-panel rounded-xl px-3.5 py-1.5 flex items-center gap-3 text-[11px] text-slate-300 ml-auto pointer-events-auto">
+      <div class="flex items-center gap-1.5">
+        <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+        <span class="text-slate-400">WGS84:</span>
+        <span id="coord-wgs84" class="font-mono font-semibold text-white">25.04980° N, 121.47180° E</span>
+      </div>
+      <div class="hidden sm:flex items-center gap-1.5 pl-3 border-l border-white/10">
+        <span class="text-slate-400">TWD97:</span>
+        <span id="coord-twd97" class="font-mono font-semibold text-sky-300">E 297,615 / N 2,771,365</span>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    /**
+     * ============================================================================
+     * 新北市三重區光復路周邊 3D 土地開發與地籍評估圖台
+     * Spatial Reference:
+     *   1 Three.js Unit = 1 Meter
+     *   Origin (0, 0) = 新北市三重區光復路一段／二段 × 興德路交叉口 (25.0498°N, 121.4718°E)
+     *   X-axis: West (-) to East (+)
+     *   Z-axis: North (-) to South (+)
+     * ============================================================================
+     */
+
+    const BASE_LAT = 25.04980;
+    const BASE_LNG = 121.47180;
+    const BASE_TWD97_E = 297615;
+    const BASE_TWD97_N = 2771365;
+    const METERS_PER_DEG_LAT = 110780;
+    const METERS_PER_DEG_LNG = 100950;
+
+    // Zoning configurations tailored to Sanchong Guangfu Road Urban Plan
+    const ZONING_CONFIG = {
+      '乙種工業區': {
+        colorHex: 0xa855f7,
+        cssBg: 'bg-purple-500/25',
+        cssText: 'text-purple-200',
+        cssBorder: 'border-purple-400/40',
+        dotBg: 'bg-purple-400',
+        category: '乙種工業區',
+        defaultBcr: 60,
+        defaultFar: 210
+      },
+      '第三種住宅區': {
+        colorHex: 0xf59e0b,
+        cssBg: 'bg-amber-500/25',
+        cssText: 'text-amber-200',
+        cssBorder: 'border-amber-400/40',
+        dotBg: 'bg-amber-400',
+        category: '住宅區',
+        defaultBcr: 50,
+        defaultFar: 240
+      },
+      '第二種商業區': {
+        colorHex: 0xef4444,
+        cssBg: 'bg-red-500/25',
+        cssText: 'text-red-200',
+        cssBorder: 'border-red-400/40',
+        dotBg: 'bg-red-400',
+        category: '商業區',
+        defaultBcr: 70,
+        defaultFar: 360
+      },
+      '公園綠地用地': {
+        colorHex: 0x10b981,
+        cssBg: 'bg-emerald-500/25',
+        cssText: 'text-emerald-200',
+        cssBorder: 'border-emerald-400/40',
+        dotBg: 'bg-emerald-400',
+        category: '公共設施',
+        defaultBcr: 15,
+        defaultFar: 30
+      }
+    };
+
+    // Real Sanchong Guangfu Rd. Road Network (1 unit = 1 meter)
+    const ROADS_DATA = [
+      {
+        name: '光復路一段',
+        type: '計畫道路',
+        width: 25,
+        orientation: 'NS',
+        hasMedian: true,
+        xMin: -12.5, xMax: 12.5,
+        zMin: -7.5, zMax: 75,
+        labelPos: [0, 2.2, 34]
+      },
+      {
+        name: '光復路二段',
+        type: '計畫道路',
+        width: 25,
+        orientation: 'NS',
+        hasMedian: true,
+        xMin: -12.5, xMax: 12.5,
+        zMin: -145, zMax: -22.5,
+        labelPos: [0, 2.2, -88]
+      },
+      {
+        name: '光復路一/二段路口',
+        type: '計畫道路',
+        width: 25,
+        orientation: 'NS',
+        hasMedian: false,
+        xMin: -12.5, xMax: 12.5,
+        zMin: -22.5, zMax: -7.5,
+        labelPos: null
+      },
+      {
+        name: '重新路五段',
+        type: '主要幹道',
+        width: 30,
+        orientation: 'EW',
+        hasMedian: true,
+        xMin: -175, xMax: 175,
+        zMin: 75, zMax: 105,
+        labelPos: [-52, 2.2, 90]
+      },
+      {
+        name: '興德路',
+        type: '計畫道路',
+        width: 15,
+        orientation: 'EW',
+        hasMedian: false,
+        xMin: -175, xMax: 175,
+        zMin: -22.5, zMax: -7.5,
+        labelPos: [52, 2.0, -15]
+      },
+      {
+        name: '中興北街',
+        type: '計畫道路',
+        width: 12,
+        orientation: 'NS',
+        hasMedian: false,
+        xMin: -102, xMax: -90,
+        zMin: -145, zMax: 75,
+        labelPos: [-96, 2.0, -38]
+      },
+      {
+        name: '光復路一段61巷',
+        type: '計畫巷道',
+        width: 8,
+        orientation: 'EW',
+        xMin: -90, xMax: -12.5,
+        zMin: 28, zMax: 36,
+        labelPos: [-52, 1.8, 32]
+      },
+      {
+        name: '光復路一段83巷',
+        type: '計畫巷道',
+        width: 8,
+        orientation: 'EW',
+        xMin: -90, xMax: -12.5,
+        zMin: -68, zMax: -60,
+        labelPos: [-52, 1.8, -64]
+      },
+      {
+        name: '頂崁科技園區側街',
+        type: '計畫道路',
+        width: 10,
+        orientation: 'NS',
+        xMin: 88, xMax: 98,
+        zMin: -145, zMax: 75,
+        labelPos: [93, 2.0, 26]
+      }
+    ];
+
+    /**
+     * 30 Authentic Sanchong District Cadastral Parcels
+     * Covering 興穀段, 中興段, 二重段 around 光復路一段/二段, 重新路五段, 興德路, 中興北街
+     */
+    const INITIAL_PARCELS = [
+      // === Block A: Guangfu Rd. Sec. 1 West & Xingde Rd. South (興穀段) ===
+      {
+        id: '0412-0000',
+        section: '興穀段',
+        x1: -48.5, z1: -6.0, x2: -14.0, z2: 26.5, // 34.5m x 32.5m = 1121.25 sqm
+        zoning: '乙種工業區',
+        bcr: 60, far: 210,
+        isCorner: true,
+        tags: ['角地・雙面臨路', '臨25米主幹道', '大面寬基地', '工業區立體化潛力'],
+        frontages: [
+          {
+            label: '主要臨路面寬',
+            width: 32.5,
+            roadName: '光復路一段',
+            roadWidth: 25,
+            roadType: '計畫道路',
+            edge: [[-14.0, -6.0], [-14.0, 26.5]],
+            roadSpan: [[-12.5, 10.25], [12.5, 10.25]]
+          },
+          {
+            label: '次要臨路面寬',
+            width: 34.5,
+            roadName: '興德路',
+            roadWidth: 15,
+            roadType: '計畫道路',
+            edge: [[-48.5, -6.0], [-14.0, -6.0]],
+            roadSpan: [[-31.25, -22.5], [-31.25, -7.5]]
+          }
+        ],
+        building: {
+          style: 'tech_tower',
+          floors: 14,
+          basement: 3,
+          use: '科技廠辦大樓（企業研發總部）',
+          age: 9,
+          landValuePing: 68.5,
+          devNote: '光復路一段與興德路黃金角地・指標科技廠辦'
+        }
+      },
+      {
+        id: '0413-0000',
+        section: '興穀段',
+        x1: -88.5, z1: -6.0, x2: -48.5, z2: 26.5, // 40.0m x 32.5m = 1300 sqm
+        zoning: '乙種工業區',
+        bcr: 60, far: 210,
+        isCorner: true,
+        tags: ['角地・雙面臨路', '40米超大面寬', '工業區立體化潛力'],
+        frontages: [
+          {
+            label: '主要臨路面寬',
+            width: 40.0,
+            roadName: '興德路',
+            roadWidth: 15,
+            roadType: '計畫道路',
+            edge: [[-88.5, -6.0], [-48.5, -6.0]],
+            roadSpan: [[-68.5, -22.5], [-68.5, -7.5]]
+          },
+          {
+            label: '次要臨路面寬',
+            width: 32.5,
+            roadName: '中興北街',
+            roadWidth: 12,
+            roadType: '計畫道路',
+            edge: [[-88.5, -6.0], [-88.5, 26.5]],
+            roadSpan: [[-102.0, 10.25], [-90.0, 10.25]]
+          }
+        ],
+        building: {
+          style: 'factory_rc',
+          floors: 3,
+          basement: 0,
+          use: '傳統RC廠房與物流倉儲',
+          age: 36,
+          landValuePing: 58.0,
+          devNote: '低密度老舊廠房・最適合申請工業區立體化獎勵'
+        }
+      },
+      {
+        id: '0414-0000',
+        section: '興穀段',
+        x1: -44.0, z1: 37.5, x2: -14.0, z2: 73.5, // 30.0m x 36.0m = 1080 sqm
+        zoning: '第二種商業區',
+        bcr: 70, far: 360,
+        isCorner: true,
+        tags: ['角地・三面臨路', '臨30米重新路五段', '鄰近捷運先嗇宮站'],
+        frontages: [
+          {
+            label: '主要臨路面寬',
+            width: 30.0,
+            roadName: '重新路五段',
+            roadWidth: 30,
+            roadType: '主要幹道',
+            edge: [[-44.0, 73.5], [-14.0, 73.5]],
+            roadSpan: [[-29.0, 75.0], [-29.0, 105.0]]
+          },
+          {
+            label: '次要臨路面寬',
+            width: 36.0,
+            roadName: '光復路一段',
+            roadWidth: 25,
+            roadType: '計畫道路',
+            edge: [[-14.0, 37.5], [-14.0, 73.5]],
+            roadSpan: [[-12.5, 55.5], [12.5, 55.5]]
+          }
+        ],
+        building: {
+          style: 'commercial_landmark',
+          floors: 16,
+          basement: 4,
+          use: '商業辦公與旗艦展示中心',
+          age: 6,
+          landValuePing: 79.0,
+          devNote: '重新路五段與光復路一段交叉口・最高商業強度'
+        }
+      },
+      {
+        id: '0415-0000',
+        section: '興穀段',
+        x1: -68.0, z1: 37.5, x2: -44.0, z2: 73.5, // 24.0m x 36.0m = 864 sqm
+        zoning: '第二種商業區',
+        bcr: 70, far: 360,
+        isCorner: false,
+        tags: ['臨30米重新路五段', '雙向臨路（前後臨街）'],
+        frontages: [
+          {
+            label: '主要臨路面寬',
+            width: 24.0,
+            roadName: '重新路五段',
+            roadWidth: 30,
+            roadType: '主要幹道',
+            edge: [[-68.0, 73.5], [-44.0, 73.5]],
+            roadSpan: [[-56.0, 75.0], [-56.0, 105.0]]
+          }
+        ],
+        building: {
+          style: 'commercial_mid',
+          floors: 8,
+          basement: 2,
+          use: '一般商業大樓與銀行分行',
+          age: 22,
+          landValuePing: 73.5,
+          devNote: '臨重新路五段30米大道・可與鄰地併案整合'
+        }
+      },
+      {
+        id: '0416-0000',
+        section: '興穀段',
+        x1: -88.5, z1: 37.5, x2: -68.0, z2: 73.5, // 20.5m x 36.0m = 738 sqm
+        zoning: '第二種商業區',
+        bcr: 70, far: 360,
+        isCorner: true,
+        tags: ['角地・雙面臨路', '臨30米重新路五段', '危老重建潛力'],
+        frontages: [
+          {
+            label: '主要臨路面寬',
+            width: 20.5,
+            roadName: '重新路五段',
+            roadWidth: 30,
+            roadType: '主要幹道',
+            edge: [[-88.5, 73.5], [-68.0, 73.5]],
+            roadSpan: [[-78.25, 75.0], [-78.25, 105.0]]
+          },
+          {
+            label: '次要臨路面寬',
+            width: 36.0,
+            roadName: '中興北街',
+            roadWidth: 12,
+            roadType: '計畫道路',
+            edge: [[-88.5, 37.5], [-88.5, 73.5]],
+            roadSpan: [[-102.0, 55.5], [-90.0, 55.5]]
+          }
+        ],
+        building: {
+          style: 'old_shophouse',
+          floors: 4,
+          basement: 0,
+          use: '老舊連棟透天店鋪',
+          age: 43,
+          landValuePing: 71.0,
+          devNote: '屋齡逾40年商業區角地・危老重建效益極高'
+        }
+      },
+
+      // === Block B: Guangfu Rd. Sec. 1 East & Xingde Rd. South (中興段) ===
+      {
+        id: '0188-0001',
+        section: '中興段',
+        x1: 14.0, z1: -6.0, x2: 52.0, z2: 34.0, // 38.0m x 40.0m = 1520 sqm
+        zoning: '乙種工業區',
+        bcr: 60, far: 210,
+        isCorner: true,
+        tags: ['角地・雙面臨路', '臨25米主幹道', '460坪旗艦基地', '工業區立體化潛力'],
+        frontages: [
+          {
+            label: '主要臨路面寬',
+            width: 40.0,
+            roadName: '光復路一段',
+            roadWidth: 25,
+            roadType: '計畫道路',
+            edge: [[14.0, -6.0], [14.0, 34.0]],
+            roadSpan: [[-12.5, 14.0], [12.5, 14.0]]
+          },
+          {
+            label: '次要臨路面寬',
+            width: 38.0,
+            roadName: '興德路',
+            roadWidth: 15,
+            roadType: '計畫道路',
+            edge: [[14.0, -6.0], [52.0, -6.0]],
+            roadSpan: [[33.0, -22.5], [33.0, -7.5]]
+          }
+        ],
+        building: {
+          style: 'tech_tower',
+          floors: 15,
+          basement: 3,
+          use: '上市科技園區廠辦大樓',
+          age: 7,
+          landValuePing: 70.0,
+          devNote: '東南側核心科技園區地標・面寬達40米'
+        }
+      },
+      {
+        id: '0189-0000',
+        section: '中興段',
+        x1: 52.0, z1: -6.0, x2: 86.5, z2: 34.0, // 34.5m x 40.0m = 1380 sqm
+        zoning: '乙種工業區',
+        bcr: 60, far: 210,
+        isCorner: true,
+        tags: ['角地・雙面臨路', '大面寬基地', '工業區立體化潛力'],
+        frontages: [
+          {
+            label: '主要臨路面寬',
+            width: 34.5,
+            roadName: '興德路',
+            roadWidth: 15,
+            roadType: '計畫道路',
+            edge: [[52.0, -6.0], [86.5, -6.0]],
+            roadSpan: [[69.25, -22.5], [69.25, -7.5]]
+          },
+          {
+            label: '次要臨路面寬',
+            width: 40.0,
+            roadName: '頂崁科技園區側街',
+            roadWidth: 10,
+            roadType: '計畫道路',
+            edge: [[86.5, -6.0], [86.5, 34.0]],
+            roadSpan: [[88.0, 14.0], [98.0, 14.0]]
+          }
+        ],
+        building: {
+          style: 'factory_rc',
+          floors: 4,
+          basement: 0,
+          use: '電子組裝廠房與辦公樓',
+          age: 32,
+          landValuePing: 59.5,
+          devNote: '完整方正工業基地・具備立體化重建資格'
+        }
+      },
+      {
+        id: '0190-0000',
+        section: '中興段',
+        x1: 14.0, z1: 34.0, x2: 50.0, z2: 73.5, // 36.0m x 39.5m = 1422 sqm
+        zoning: '第二種商業區',
+        bcr: 70, far: 360,
+        isCorner: true,
+        tags: ['角地・雙面臨路', '捷運先嗇宮站出口旁', '臨30米重新路五段'],
+        frontages: [
+          {
+            label: '主要臨路面寬',
+            width: 36.0,
+            roadName: '重新路五段',
+            roadWidth: 30,
+            roadType: '主要幹道',
+            edge: [[14.0, 73.5], [50.0, 73.5]],
+            roadSpan: [[32.0, 75.0], [32.0, 105.0]]
+          },
+          {
+            label: '次要臨路面寬',
+            width: 39.5,
+            roadName: '光復路一段',
+            roadWidth: 25,
+            roadType: '計畫道路',
+            edge: [[14.0, 34.0], [14.0, 73.5]],
+            roadSpan: [[-12.5, 53.75], [12.5, 53.75]]
+          }
+        ],
+        building: {
+          style: 'commercial_landmark',
+          floors: 18,
+          basement: 4,
+          use: '捷運共構商辦與複合商場（近先嗇宮站）',
+          age: 5,
+          landValuePing: 82.0,
+          devNote: '捷運先嗇宮站樞紐核心・全區最高商業價值'
+        }
+      },
+      {
+        id: '0191-0000',
+        section: '中興段',
+        x1: 50.0, z1: 34.0, x2: 86.5, z2: 73.5, // 36.5m x 39.5m = 1441.75 sqm
+        zoning: '乙種工業區',
+        bcr: 60, far: 210,
+        isCorner: true,
+        tags: ['角地・雙面臨路', '臨30米重新路五段', '可開發素地／停車場'],
+        frontages: [
+          {
+            label: '主要臨路面寬',
+            width: 36.5,
+            roadName: '重新路五段',
+            roadWidth: 30,
+            roadType: '主要幹道',
+            edge: [[50.0, 73.5], [86.5, 73.5]],
+            roadSpan: [[68.25, 75.0], [68.25, 105.0]]
+          },
+          {
+            label: '次要臨路面寬',
+            width: 39.5,
+            roadName: '頂崁科技園區側街',
+            roadWidth: 10,
+            roadType: '計畫道路',
+            edge: [[86.5, 34.0], [86.5, 73.5]],
+            roadSpan: [[88.0, 53.75], [98.0, 53.75]]
+          }
+        ],
+        building: {
+          style: 'vacant_parking',
+          floors: 0,
+          basement: 0,
+          use: '平面收費停車場（可立即開發素地）',
+          age: 0,
+          landValuePing: 67.0,
+          devNote: '436坪無地上物素地・無拆遷成本可立即興建'
+        }
+      },
+
+      // === Block C: Guangfu Rd. Sec. 2 West & Xingde Rd. North (二重段) ===
+      {
+        id: '0241-0000',
+        section: '二重段',
+        x1: -46.0, z1: -58.5, x2: -14.0, z2: -24.0, // 32.0m x 34.5m = 1104 sqm
+        zoning: '乙種工業區',
+        bcr: 60, far: 210,
+        isCorner: true,
+        tags: ['角地・雙面臨路', '臨25米光復路二段', '大面寬基地'],
+        frontages: [
+          {
+            label: '主要臨路面寬',
+            width: 34.5,
+            roadName: '光復路二段',
+            roadWidth: 25,
+            roadType: '計畫道路',
+            edge: [[-14.0, -58.5], [-14.0, -24.0]],
+            roadSpan: [[-12.5, -41.25], [12.5, -41.25]]
+          },
+          {
+            label: '次要臨路面寬',
+            width: 32.0,
+            roadName: '興德路',
+            roadWidth: 15,
+            roadType: '計畫道路',
+            edge: [[-46.0, -24.0], [-14.0, -24.0]],
+            roadSpan: [[-30.0, -22.5], [-30.0, -7.5]]
+          }
+        ],
+        building: {
+          style: 'tech_tower',
+          floors: 12,
+          basement: 2,
+          use: '智慧製造研發與企業辦公大樓',
+          age: 10,
+          landValuePing: 65.5,
+          devNote: '光復路二段與興德路西北角地・廠辦聚集帶'
+        }
+      },
+      {
+        id: '0242-0000',
+        section: '二重段',
+        x1: -88.5, z1: -58.5, x2: -46.0, z2: -24.0, // 42.5m x 34.5m = 1466.25 sqm
+        zoning: '公園綠地用地',
+        bcr: 15, far: 30,
+        isCorner: true,
+        tags: ['鄰里公園綠地', '雙面臨路開放空間'],
+        frontages: [
+          {
+            label: '南側臨路面寬',
+            width: 42.5,
+            roadName: '興德路',
+            roadWidth: 15,
+            roadType: '計畫道路',
+            edge: [[-88.5, -24.0], [-46.0, -24.0]],
+            roadSpan: [[-67.25, -22.5], [-67.25, -7.5]]
+          },
+          {
+            label: '西側臨路面寬',
+            width: 34.5,
+            roadName: '中興北街',
+            roadWidth: 12,
+            roadType: '計畫道路',
+            edge: [[-88.5, -58.5], [-88.5, -24.0]],
+            roadSpan: [[-102.0, -41.25], [-90.0, -41.25]]
+          }
+        ],
+        building: {
+          style: 'park',
+          floors: 0,
+          basement: 0,
+          use: '興穀鄰里公園與滯洪綠帶',
+          age: 0,
+          landValuePing: 41.0,
+          devNote: '公共綠地開放空間・提升周邊住宅生活品質'
+        }
+      },
+      {
+        id: '0243-0000',
+        section: '二重段',
+        x1: -44.0, z1: -102.0, x2: -14.0, z2: -69.5, // 30.0m x 32.5m = 975 sqm
+        zoning: '第三種住宅區',
+        bcr: 50, far: 240,
+        isCorner: true,
+        tags: ['角地・雙面臨路', '臨25米光復路二段', '大面寬住宅基地'],
+        frontages: [
+          {
+            label: '主要臨路面寬',
+            width: 32.5,
+            roadName: '光復路二段',
+            roadWidth: 25,
+            roadType: '計畫道路',
+            edge: [[-14.0, -102.0], [-14.0, -69.5]],
+            roadSpan: [[-12.5, -85.75], [12.5, -85.75]]
+          },
+          {
+            label: '次要臨路面寬',
+            width: 30.0,
+            roadName: '光復路一段83巷',
+            roadWidth: 8,
+            roadType: '計畫巷道',
+            edge: [[-44.0, -69.5], [-14.0, -69.5]],
+            roadSpan: [[-29.0, -68.0], [-29.0, -60.0]]
+          }
+        ],
+        building: {
+          style: 'residential_modern',
+          floors: 13,
+          basement: 3,
+          use: '電梯景觀集合住宅大樓',
+          age: 8,
+          landValuePing: 62.0,
+          devNote: '面公園景觀角地・臨光復路二段25米林蔭大道'
+        }
+      },
+      {
+        id: '0244-0000',
+        section: '二重段',
+        x1: -66.0, z1: -102.0, x2: -44.0, z2: -69.5, // 22.0m x 32.5m = 715 sqm
+        zoning: '第三種住宅區',
+        bcr: 50, far: 240,
+        isCorner: false,
+        tags: ['面公園第一排', '都更／危老重建潛力'],
+        frontages: [
+          {
+            label: '主要臨路面寬',
+            width: 22.0,
+            roadName: '光復路一段83巷',
+            roadWidth: 8,
+            roadType: '計畫巷道',
+            edge: [[-66.0, -69.5], [-44.0, -69.5]],
+            roadSpan: [[-55.0, -68.0], [-55.0, -60.0]]
+          }
+        ],
+        building: {
+          style: 'residential_walkup',
+          floors: 5,
+          basement: 0,
+          use: '五層樓連棟步登公寓',
+          age: 41,
+          landValuePing: 54.0,
+          devNote: '屋齡逾40年老舊公寓・正對公園具都更整合價值'
+        }
+      },
+      {
+        id: '0245-0000',
+        section: '二重段',
+        x1: -88.5, z1: -102.0, x2: -66.0, z2: -69.5, // 22.5m x 32.5m = 731.25 sqm
+        zoning: '第三種住宅區',
+        bcr: 50, far: 240,
+        isCorner: true,
+        tags: ['角地・雙面臨路', '面公園第一排', '危老重建潛力'],
+        frontages: [
+          {
+            label: '主要臨路面寬',
+            width: 32.5,
+            roadName: '中興北街',
+            roadWidth: 12,
+            roadType: '計畫道路',
+            edge: [[-88.5, -102.0], [-88.5, -69.5]],
+            roadSpan: [[-102.0, -85.75], [-90.0, -85.75]]
+          },
+          {
+            label: '次要臨路面寬',
+            width: 22.5,
+            roadName: '光復路一段83巷',
+            roadWidth: 8,
+            roadType: '計畫巷道',
+            edge: [[-88.5, -69.5], [-66.0, -69.5]],
+            roadSpan: [[-77.25, -68.0], [-77.25, -60.0]]
+          }
+        ],
+        building: {
+          style: 'residential_walkup',
+          floors: 4,
+          basement: 0,
+          use: '四層樓老舊集合住宅',
+          age: 44,
+          landValuePing: 55.5,
+          devNote: '中興北街與83巷口角地・符合危老重建標準'
+        }
+      },
+
+      // === Block D: Guangfu Rd. Sec. 2 East & Xingde Rd. North (中興段北側) ===
+      {
+        id: '0192-0000',
+        section: '中興段',
+        x1: 14.0, z1: -64.0, x2: 50.0, z2: -24.0, // 36.0m x 40.0m = 1440 sqm
+        zoning: '乙種工業區',
+        bcr: 60, far: 210,
+        isCorner: true,
+        tags: ['角地・雙面臨路', '臨25米光復路二段', '工業區立體化潛力'],
+        frontages: [
+          {
+            label: '主要臨路面寬',
+            width: 40.0,
+            roadName: '光復路二段',
+            roadWidth: 25,
+            roadType: '計畫道路',
+            edge: [[14.0, -64.0], [14.0, -24.0]],
+            roadSpan: [[-12.5, -44.0], [12.5, -44.0]]
+          },
+          {
+            label: '次要臨路面寬',
+            width: 36.0,
+            roadName: '興德路',
+            roadWidth: 15,
+            roadType: '計畫道路',
+            edge: [[14.0, -24.0], [50.0, -24.0]],
+            roadSpan: [[32.0, -22.5], [32.0, -7.5]]
+          }
+        ],
+        building: {
+          style: 'factory_rc',
+          floors: 4,
+          basement: 0,
+          use: '精密機械廠房與倉儲中心',
+          age: 35,
+          landValuePing: 63.0,
+          devNote: '光復路二段與興德路東北角地・立體化轉型首選'
+        }
+      },
+      {
+        id: '0193-0000',
+        section: '中興段',
+        x1: 50.0, z1: -64.0, x2: 86.5, z2: -24.0, // 36.5m x 40.0m = 1460 sqm
+        zoning: '乙種工業區',
+        bcr: 60, far: 210,
+        isCorner: true,
+        tags: ['角地・雙面臨路', '大面寬基地'],
+        frontages: [
+          {
+            label: '主要臨路面寬',
+            width: 36.5,
+            roadName: '興德路',
+            roadWidth: 15,
+            roadType: '計畫道路',
+            edge: [[50.0, -24.0], [86.5, -24.0]],
+            roadSpan: [[68.25, -22.5], [68.25, -7.5]]
+          },
+          {
+            label: '次要臨路面寬',
+            width: 40.0,
+            roadName: '頂崁科技園區側街',
+            roadWidth: 10,
+            roadType: '計畫道路',
+            edge: [[86.5, -64.0], [86.5, -24.0]],
+            roadSpan: [[88.0, -44.0], [98.0, -44.0]]
+          }
+        ],
+        building: {
+          style: 'tech_tower',
+          floors: 11,
+          basement: 2,
+          use: '新式科技廠辦大樓',
+          age: 8,
+          landValuePing: 61.0,
+          devNote: '近年完成工業區立體化更新廠辦'
+        }
+      },
+      {
+        id: '0194-0000',
+        section: '中興段',
+        x1: 14.0, z1: -102.0, x2: 50.0, z2: -64.0, // 36.0m x 38.0m = 1368 sqm
+        zoning: '乙種工業區',
+        bcr: 60, far: 210,
+        isCorner: false,
+        tags: ['臨25米光復路二段', '38米大面寬'],
+        frontages: [
+          {
+            label: '主要臨路面寬',
+            width: 38.0,
+            roadName: '光復路二段',
+            roadWidth: 25,
+            roadType: '計畫道路',
+            edge: [[14.0, -102.0], [14.0, -64.0]],
+            roadSpan: [[-12.5, -83.0], [12.5, -83.0]]
+          }
+        ],
+        building: {
+          style: 'tech_tower',
+          floors: 13,
+          basement: 3,
+          use: '生技醫藥與資訊科技總部',
+          age: 6,
+          landValuePing: 64.5,
+          devNote: '光復路二段現代化玻璃帷幕廠辦'
+        }
+      },
+      {
+        id: '0195-0000',
+        section: '中興段',
+        x1: 50.0, z1: -102.0, x2: 86.5, z2: -64.0, // 36.5m x 38.0m = 1387 sqm
+        zoning: '乙種工業區',
+        bcr: 60, far: 210,
+        isCorner: false,
+        tags: ['大面寬基地', '工業區立體化潛力'],
+        frontages: [
+          {
+            label: '主要臨路面寬',
+            width: 38.0,
+            roadName: '頂崁科技園區側街',
+            roadWidth: 10,
+            roadType: '計畫道路',
+            edge: [[86.5, -102.0], [86.5, -64.0]],
+            roadSpan: [[88.0, -83.0], [98.0, -83.0]]
+          }
+        ],
+        building: {
+          style: 'factory_rc',
+          floors: 3,
+          basement: 0,
+          use: '食品加工與冷鏈物流廠房',
+          age: 34,
+          landValuePing: 56.5,
+          devNote: '完整419坪方正廠房基地・具備整合潛力'
+        }
+      },
+
+      // === Block E: Outer West Zhongxing N. St. Corridor (二重段西側) ===
+      {
+        id: '0246-0000',
+        section: '二重段',
+        x1: -136.0, z1: -6.0, x2: -103.5, z2: 32.0, // 32.5m x 38.0m = 1235 sqm
+        zoning: '乙種工業區',
+        bcr: 60, far: 210,
+        isCorner: true,
+        tags: ['角地・雙面臨路', '大面寬基地'],
+        frontages: [
+          {
+            label: '主要臨路面寬',
+            width: 38.0,
+            roadName: '中興北街',
+            roadWidth: 12,
+            roadType: '計畫道路',
+            edge: [[-103.5, -6.0], [-103.5, 32.0]],
+            roadSpan: [[-102.0, 13.0], [-90.0, 13.0]]
+          },
+          {
+            label: '次要臨路面寬',
+            width: 32.5,
+            roadName: '興德路',
+            roadWidth: 15,
+            roadType: '計畫道路',
+            edge: [[-136.0, -6.0], [-103.5, -6.0]],
+            roadSpan: [[-119.75, -22.5], [-119.75, -7.5]]
+          }
+        ],
+        building: {
+          style: 'factory_rc',
+          floors: 4,
+          basement: 0,
+          use: '傳統金屬加工與印刷廠房',
+          age: 37,
+          landValuePing: 55.0,
+          devNote: '興德路與中興北街西南角地・立體化潛力'
+        }
+      },
+      {
+        id: '0247-0000',
+        section: '二重段',
+        x1: -136.0, z1: 32.0, x2: -103.5, z2: 73.5, // 32.5m x 41.5m = 1348.75 sqm
+        zoning: '第二種商業區',
+        bcr: 70, far: 360,
+        isCorner: true,
+        tags: ['角地・雙面臨路', '臨30米重新路五段'],
+        frontages: [
+          {
+            label: '主要臨路面寬',
+            width: 32.5,
+            roadName: '重新路五段',
+            roadWidth: 30,
+            roadType: '主要幹道',
+            edge: [[-136.0, 73.5], [-103.5, 73.5]],
+            roadSpan: [[-119.75, 75.0], [-119.75, 105.0]]
+          },
+          {
+            label: '次要臨路面寬',
+            width: 41.5,
+            roadName: '中興北街',
+            roadWidth: 12,
+            roadType: '計畫道路',
+            edge: [[-103.5, 32.0], [-103.5, 73.5]],
+            roadSpan: [[-102.0, 52.75], [-90.0, 52.75]]
+          }
+        ],
+        building: {
+          style: 'commercial_mid',
+          floors: 10,
+          basement: 2,
+          use: '汽車旗艦展示中心與商辦',
+          age: 14,
+          landValuePing: 69.5,
+          devNote: '重新路五段西段商業角地・408坪大基地'
+        }
+      },
+      {
+        id: '0248-0000',
+        section: '二重段',
+        x1: -136.0, z1: -62.0, x2: -103.5, z2: -24.0, // 32.5m x 38.0m = 1235 sqm
+        zoning: '第三種住宅區',
+        bcr: 50, far: 240,
+        isCorner: true,
+        tags: ['角地・雙面臨路', '面公園景觀', '大面寬住宅基地'],
+        frontages: [
+          {
+            label: '主要臨路面寬',
+            width: 38.0,
+            roadName: '中興北街',
+            roadWidth: 12,
+            roadType: '計畫道路',
+            edge: [[-103.5, -62.0], [-103.5, -24.0]],
+            roadSpan: [[-102.0, -43.0], [-90.0, -43.0]]
+          },
+          {
+            label: '次要臨路面寬',
+            width: 32.5,
+            roadName: '興德路',
+            roadWidth: 15,
+            roadType: '計畫道路',
+            edge: [[-136.0, -24.0], [-103.5, -24.0]],
+            roadSpan: [[-119.75, -22.5], [-119.75, -7.5]]
+          }
+        ],
+        building: {
+          style: 'residential_modern',
+          floors: 12,
+          basement: 2,
+          use: '社區型電梯住宅大樓',
+          age: 11,
+          landValuePing: 57.5,
+          devNote: '正對鄰里公園綠地・雙面臨路角地'
+        }
+      },
+      {
+        id: '0249-0000',
+        section: '二重段',
+        x1: -136.0, z1: -102.0, x2: -103.5, z2: -62.0, // 32.5m x 40.0m = 1300 sqm
+        zoning: '第三種住宅區',
+        bcr: 50, far: 240,
+        isCorner: false,
+        tags: ['大面寬住宅基地', '都更／危老重建潛力'],
+        frontages: [
+          {
+            label: '主要臨路面寬',
+            width: 40.0,
+            roadName: '中興北街',
+            roadWidth: 12,
+            roadType: '計畫道路',
+            edge: [[-103.5, -102.0], [-103.5, -62.0]],
+            roadSpan: [[-102.0, -82.0], [-90.0, -82.0]]
+          }
+        ],
+        building: {
+          style: 'residential_walkup',
+          floors: 5,
+          basement: 0,
+          use: '老舊連棟公寓社區（都更單元）',
+          age: 42,
+          landValuePing: 52.0,
+          devNote: '393坪完整老舊公寓街廓・都更整合首選'
+        }
+      },
+
+      // === Block F: Outer East Tech Corridor (中興段東側) ===
+      {
+        id: '0196-0000',
+        section: '中興段',
+        x1: 99.5, z1: -6.0, x2: 136.0, z2: 34.0, // 36.5m x 40.0m = 1460 sqm
+        zoning: '乙種工業區',
+        bcr: 60, far: 210,
+        isCorner: true,
+        tags: ['角地・雙面臨路', '大面寬基地'],
+        frontages: [
+          {
+            label: '主要臨路面寬',
+            width: 36.5,
+            roadName: '興德路',
+            roadWidth: 15,
+            roadType: '計畫道路',
+            edge: [[99.5, -6.0], [136.0, -6.0]],
+            roadSpan: [[117.75, -22.5], [117.75, -7.5]]
+          },
+          {
+            label: '次要臨路面寬',
+            width: 40.0,
+            roadName: '頂崁科技園區側街',
+            roadWidth: 10,
+            roadType: '計畫道路',
+            edge: [[99.5, -6.0], [99.5, 34.0]],
+            roadSpan: [[88.0, 14.0], [98.0, 14.0]]
+          }
+        ],
+        building: {
+          style: 'tech_tower',
+          floors: 13,
+          basement: 3,
+          use: '雲端數據與AI硬體研發中心',
+          age: 4,
+          landValuePing: 62.5,
+          devNote: '新建科技廠辦園區・鄰近二重疏洪道景觀'
+        }
+      },
+      {
+        id: '0197-0000',
+        section: '中興段',
+        x1: 99.5, z1: 34.0, x2: 136.0, z2: 73.5, // 36.5m x 39.5m = 1441.75 sqm
+        zoning: '第二種商業區',
+        bcr: 70, far: 360,
+        isCorner: true,
+        tags: ['角地・雙面臨路', '臨30米重新路五段'],
+        frontages: [
+          {
+            label: '主要臨路面寬',
+            width: 36.5,
+            roadName: '重新路五段',
+            roadWidth: 30,
+            roadType: '主要幹道',
+            edge: [[99.5, 73.5], [136.0, 73.5]],
+            roadSpan: [[117.75, 75.0], [117.75, 105.0]]
+          },
+          {
+            label: '次要臨路面寬',
+            width: 39.5,
+            roadName: '頂崁科技園區側街',
+            roadWidth: 10,
+            roadType: '計畫道路',
+            edge: [[99.5, 34.0], [99.5, 73.5]],
+            roadSpan: [[88.0, 53.75], [98.0, 53.75]]
+          }
+        ],
+        building: {
+          style: 'commercial_mid',
+          floors: 9,
+          basement: 2,
+          use: '商務旅館與企業會館',
+          age: 15,
+          landValuePing: 72.0,
+          devNote: '重新路五段東側商業角地・交通便捷'
+        }
+      },
+      {
+        id: '0198-0000',
+        section: '中興段',
+        x1: 99.5, z1: -64.0, x2: 136.0, z2: -24.0, // 36.5m x 40.0m = 1460 sqm
+        zoning: '乙種工業區',
+        bcr: 60, far: 210,
+        isCorner: true,
+        tags: ['角地・雙面臨路', '工業區立體化潛力'],
+        frontages: [
+          {
+            label: '主要臨路面寬',
+            width: 36.5,
+            roadName: '興德路',
+            roadWidth: 15,
+            roadType: '計畫道路',
+            edge: [[99.5, -24.0], [136.0, -24.0]],
+            roadSpan: [[117.75, -22.5], [117.75, -7.5]]
+          },
+          {
+            label: '次要臨路面寬',
+            width: 40.0,
+            roadName: '頂崁科技園區側街',
+            roadWidth: 10,
+            roadType: '計畫道路',
+            edge: [[99.5, -64.0], [99.5, -24.0]],
+            roadSpan: [[88.0, -44.0], [98.0, -44.0]]
+          }
+        ],
+        building: {
+          style: 'factory_rc',
+          floors: 3,
+          basement: 0,
+          use: '塑膠射出與模具製造廠房',
+          age: 39,
+          landValuePing: 57.5,
+          devNote: '441坪角地老舊廠房・立體化轉型潛力極高'
+        }
+      },
+
+      // === Block G: South of Chongxin Rd. Sec. 5 (興穀段南側) ===
+      {
+        id: '0417-0000',
+        section: '興穀段',
+        x1: -48.0, z1: 106.5, x2: -14.0, z2: 138.0, // 34.0m x 31.5m = 1071 sqm
+        zoning: '第二種商業區',
+        bcr: 70, far: 360,
+        isCorner: true,
+        tags: ['角地・雙面臨路', '臨30米重新路五段', '臨25米光復路一段'],
+        frontages: [
+          {
+            label: '主要臨路面寬',
+            width: 34.0,
+            roadName: '重新路五段',
+            roadWidth: 30,
+            roadType: '主要幹道',
+            edge: [[-48.0, 106.5], [-14.0, 106.5]],
+            roadSpan: [[-31.0, 75.0], [-31.0, 105.0]]
+          },
+          {
+            label: '次要臨路面寬',
+            width: 31.5,
+            roadName: '光復路一段',
+            roadWidth: 25,
+            roadType: '計畫道路',
+            edge: [[-14.0, 106.5], [-14.0, 138.0]],
+            roadSpan: [[-12.5, 122.0], [12.5, 122.0]]
+          }
+        ],
+        building: {
+          style: 'commercial_landmark',
+          floors: 15,
+          basement: 3,
+          use: '大型量販商場與商業辦公大樓',
+          age: 9,
+          landValuePing: 76.5,
+          devNote: '重新路五段南側核心商業角地'
+        }
+      },
+      {
+        id: '0418-0000',
+        section: '興穀段',
+        x1: -88.5, z1: 106.5, x2: -48.0, z2: 138.0, // 40.5m x 31.5m = 1275.75 sqm
+        zoning: '第三種住宅區',
+        bcr: 50, far: 240,
+        isCorner: false,
+        tags: ['臨30米重新路五段', '40.5米超大面寬'],
+        frontages: [
+          {
+            label: '主要臨路面寬',
+            width: 40.5,
+            roadName: '重新路五段',
+            roadWidth: 30,
+            roadType: '主要幹道',
+            edge: [[-88.5, 106.5], [-48.0, 106.5]],
+            roadSpan: [[-68.25, 75.0], [-68.25, 105.0]]
+          }
+        ],
+        building: {
+          style: 'residential_modern',
+          floors: 14,
+          basement: 3,
+          use: '水岸景觀集合住宅大樓',
+          age: 7,
+          landValuePing: 63.5,
+          devNote: '臨重新路五段30米大道・大面寬住宅社區'
+        }
+      },
+      {
+        id: '0419-0000',
+        section: '興穀段',
+        x1: 14.0, z1: 106.5, x2: 52.0, z2: 138.0, // 38.0m x 31.5m = 1197 sqm
+        zoning: '第二種商業區',
+        bcr: 70, far: 360,
+        isCorner: true,
+        tags: ['角地・雙面臨路', '捷運先嗇宮站南側出口'],
+        frontages: [
+          {
+            label: '主要臨路面寬',
+            width: 38.0,
+            roadName: '重新路五段',
+            roadWidth: 30,
+            roadType: '主要幹道',
+            edge: [[14.0, 106.5], [52.0, 106.5]],
+            roadSpan: [[33.0, 75.0], [33.0, 105.0]]
+          },
+          {
+            label: '次要臨路面寬',
+            width: 31.5,
+            roadName: '光復路一段',
+            roadWidth: 25,
+            roadType: '計畫道路',
+            edge: [[14.0, 106.5], [14.0, 138.0]],
+            roadSpan: [[-12.5, 122.0], [12.5, 122.0]]
+          }
+        ],
+        building: {
+          style: 'commercial_mid',
+          floors: 11,
+          basement: 2,
+          use: '醫美診所與商業複合大樓',
+          age: 13,
+          landValuePing: 75.0,
+          devNote: '先嗇宮站周邊高人流商業基地'
+        }
+      },
+      {
+        id: '0420-0000',
+        section: '興穀段',
+        x1: 52.0, z1: 106.5, x2: 86.5, z2: 138.0, // 34.5m x 31.5m = 1086.75 sqm
+        zoning: '第三種住宅區',
+        bcr: 50, far: 240,
+        isCorner: false,
+        tags: ['臨30米重新路五段', '都更／危老重建潛力'],
+        frontages: [
+          {
+            label: '主要臨路面寬',
+            width: 34.5,
+            roadName: '重新路五段',
+            roadWidth: 30,
+            roadType: '主要幹道',
+            edge: [[52.0, 106.5], [86.5, 106.5]],
+            roadSpan: [[69.25, 75.0], [69.25, 105.0]]
+          }
+        ],
+        building: {
+          style: 'residential_walkup',
+          floors: 5,
+          basement: 0,
+          use: '老舊連棟公寓與一樓店面',
+          age: 40,
+          landValuePing: 60.0,
+          devNote: '鄰近捷運站老舊住宅區・都更潛力極佳'
+        }
+      },
+
+      // === Additional Fine-Grained Lane Parcels along 光復路一段61巷 (興穀段) ===
+      {
+        id: '0421-0000',
+        section: '興穀段',
+        x1: -88.5, z1: 26.5, x2: -63.0, z2: 27.2, // Placeholder replaced below with full block subdivision
+        skip: true
+      }
+    ].filter((p) => !p.skip);
+
+    // Let's also include 2 fine-grained lane parcels in Block A North of Lane 61 (z: 26.5 is already used, let's adjust Block A's 0412 & 0413 z2 to 15.0 so we have two crisp 8m-lane parcels along 光復路一段61巷!)
+    INITIAL_PARCELS[0].z2 = 14.5; // 0412-0000: 34.5m x 20.5m = 707.25 sqm
+    INITIAL_PARCELS[0].frontages[0].width = 20.5;
+    INITIAL_PARCELS[0].frontages[0].edge = [[-14.0, -6.0], [-14.0, 14.5]];
+    INITIAL_PARCELS[0].frontages[0].roadSpan = [[-12.5, 4.25], [12.5, 4.25]];
+
+    INITIAL_PARCELS[1].z2 = 14.5; // 0413-0000: 40.0m x 20.5m = 820.0 sqm
+    INITIAL_PARCELS[1].frontages[1].width = 20.5;
+    INITIAL_PARCELS[1].frontages[1].edge = [[-88.5, -6.0], [-88.5, 14.5]];
+    INITIAL_PARCELS[1].frontages[1].roadSpan = [[-102.0, 4.25], [-90.0, 4.25]];
+
+    // Add 2 dedicated parcels facing 光復路一段61巷 (width 8m) so users can test >=8m road filter & lane frontage!
+    INITIAL_PARCELS.push(
+      {
+        id: '0421-0000',
+        section: '興穀段',
+        x1: -48.5, z1: 14.5, x2: -14.0, z2: 26.5, // 34.5m x 12.0m = 414 sqm
+        zoning: '乙種工業區',
+        bcr: 60, far: 210,
+        isCorner: true,
+        tags: ['角地・雙面臨路', '臨25米光復路一段', '臨8米61巷'],
+        frontages: [
+          {
+            label: '主要臨路面寬',
+            width: 12.0,
+            roadName: '光復路一段',
+            roadWidth: 25,
+            roadType: '計畫道路',
+            edge: [[-14.0, 14.5], [-14.0, 26.5]],
+            roadSpan: [[-12.5, 20.5], [12.5, 20.5]]
+          },
+          {
+            label: '次要臨路面寬',
+            width: 34.5,
+            roadName: '光復路一段61巷',
+            roadWidth: 8,
+            roadType: '計畫巷道',
+            edge: [[-48.5, 26.5], [-14.0, 26.5]],
+            roadSpan: [[-31.25, 28.0], [-31.25, 36.0]]
+          }
+        ],
+        building: {
+          style: 'factory_rc',
+          floors: 3,
+          basement: 0,
+          use: '小型精密加工廠房',
+          age: 35,
+          landValuePing: 61.5,
+          devNote: '光復路一段與61巷口角地・可與北側0412地號合併'
+        }
+      },
+      {
+        id: '0422-0000',
+        section: '興穀段',
+        x1: -88.5, z1: 14.5, x2: -48.5, z2: 26.5, // 40.0m x 12.0m = 480 sqm
+        zoning: '第三種住宅區',
+        bcr: 50, far: 240,
+        isCorner: true,
+        tags: ['角地・雙面臨路', '臨8米61巷', '危老重建潛力'],
+        frontages: [
+          {
+            label: '主要臨路面寬',
+            width: 40.0,
+            roadName: '光復路一段61巷',
+            roadWidth: 8,
+            roadType: '計畫巷道',
+            edge: [[-88.5, 26.5], [-48.5, 26.5]],
+            roadSpan: [[-68.5, 28.0], [-68.5, 36.0]]
+          },
+          {
+            label: '次要臨路面寬',
+            width: 12.0,
+            roadName: '中興北街',
+            roadWidth: 12,
+            roadType: '計畫道路',
+            edge: [[-88.5, 14.5], [-88.5, 26.5]],
+            roadSpan: [[-102.0, 20.5], [-90.0, 20.5]]
+          }
+        ],
+        building: {
+          style: 'old_shophouse',
+          floors: 4,
+          basement: 0,
+          use: '巷弄連棟透天住宅',
+          age: 44,
+          landValuePing: 53.0,
+          devNote: '屋齡逾40年老舊透天・面寬40米整合潛力'
+        }
+      }
+    );
+
+    // Application State
+    const appState = {
+      parcels: [],
+      selectedParcelId: null,
+      layers: {
+        buildings: true,
+        buildingOpacity: 1.0,
+        zoning: true,
+        cadastral: true,
+        roads: true
+      },
+      filters: {
+        zoning: 'ALL',
+        minFrontage: 0,
+        minRoadWidth: 0,
+        cornerOnly: false
+      },
+      bonuses: {
+        industrial20: false,
+        renewal30: false
+      }
+    };
+
+    // Three.js Globals
+    let scene, camera, renderer, controls;
+    let raycaster, mouse;
+    let groundPlaneMesh;
+    let parcelObjectsMap = new Map();
+    let roadObjectsGroup = new THREE.Group();
+    let dimensionGroup = new THREE.Group();
+    let cameraTween = null;
+    let pointerDownPos = { x: 0, y: 0 };
+
+    // HTML Projected Labels Registry
+    let projectedLabels = []; // { el, worldPos: THREE.Vector3, type: 'parcel' | 'road' | 'dimension', parcelId?: string }
+
+    /**
+     * ============================================================================
+     * Coordinate & Utility Functions
+     * ============================================================================
+     */
+
+    function sqmToPing(sqm) {
+      return sqm * 0.3025;
+    }
+
+    function sceneXZToGeo(x, z) {
+      const lat = BASE_LAT - z / METERS_PER_DEG_LAT;
+      const lng = BASE_LNG + x / METERS_PER_DEG_LNG;
+      const twdE = Math.round(BASE_TWD97_E + x);
+      const twdN = Math.round(BASE_TWD97_N - z);
+      return {
+        latStr: `${lat.toFixed(5)}° N, ${lng.toFixed(5)}° E`,
+        twdStr: `E ${twdE.toLocaleString()} / N ${twdN.toLocaleString()}`
+      };
+    }
+
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      const borderClass =
+        type === 'success'
+          ? 'border-emerald-400/50 text-emerald-200'
+          : type === 'warn'
+          ? 'border-amber-400/50 text-amber-200'
+          : 'border-sky-400/50 text-sky-200';
+      toast.className = `glass-panel px-4 py-2 rounded-xl text-xs font-medium shadow-2xl border ${borderClass} transition-all duration-300 opacity-0 translate-y-2`;
+      toast.textContent = message;
+      container.appendChild(toast);
+
+      requestAnimationFrame(() => {
+        toast.classList.remove('opacity-0', 'translate-y-2');
+      });
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+      }, 2800);
+    }
+
+    /**
+     * Registers a sharp HTML label that tracks a 3D world coordinate via Vector3.project(camera)
+     */
+    function addProjectedLabel(htmlContent, className, worldPos, meta = {}) {
+      const overlay = document.getElementById('labels-overlay');
+      const el = document.createElement('div');
+      el.className = `proj-label ${className}`;
+      el.innerHTML = htmlContent;
+      overlay.appendChild(el);
+
+      const entry = {
+        el,
+        worldPos: worldPos.clone(),
+        ...meta
+      };
+      projectedLabels.push(entry);
+      return entry;
+    }
+
+    function removeProjectedLabelsByType(type) {
+      projectedLabels = projectedLabels.filter((item) => {
+        if (item.type === type) {
+          item.el.remove();
+          return false;
+        }
+        return true;
+      });
+    }
+
+    /**
+     * Generates procedural architectural building textures
+     */
+    function createBuildingFacadeTexture(style) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 256;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      if (style === 'tech_tower') {
+        // Modern Sanchong Tech Headquarters curtain wall
+        const grad = ctx.createLinearGradient(0, 0, 0, 512);
+        grad.addColorStop(0, '#17375e');
+        grad.addColorStop(0.5, '#225288');
+        grad.addColorStop(1, '#122a48');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 256, 512);
+
+        const cols = 8;
+        const rows = 16;
+        const cw = 256 / cols;
+        const rh = 512 / rows;
+
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            const isLit = (r * 5 + c * 11) % 6 === 0;
+            ctx.fillStyle = isLit ? 'rgba(186, 230, 253, 0.38)' : 'rgba(56, 189, 248, 0.16)';
+            ctx.fillRect(c * cw + 2, r * rh + 3, cw - 4, rh - 6);
+          }
+          ctx.fillStyle = '#0b1526';
+          ctx.fillRect(0, r * rh, 256, 3);
+        }
+      } else if (style === 'commercial_landmark' || style === 'commercial_mid') {
+        // Commercial office & retail complex along Chongxin Rd. Sec. 5
+        const grad = ctx.createLinearGradient(0, 0, 0, 512);
+        grad.addColorStop(0, '#2c3e50');
+        grad.addColorStop(1, '#1a252f');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 256, 512);
+
+        const cols = 7;
+        const rows = 15;
+        const cw = 256 / cols;
+        const rh = 512 / rows;
+
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            const isLit = (r * 3 + c * 7) % 4 === 0;
+            ctx.fillStyle = isLit ? 'rgba(253, 224, 71, 0.36)' : 'rgba(148, 163, 184, 0.22)';
+            ctx.fillRect(c * cw + 3, r * rh + 4, cw - 6, rh - 8);
+          }
+          ctx.fillStyle = '#0f172a';
+          ctx.fillRect(0, r * rh, 256, 3);
+        }
+      } else if (style === 'factory_rc') {
+        // Industrial RC factory / warehouse facade
+        ctx.fillStyle = '#94a3b8';
+        ctx.fillRect(0, 0, 256, 512);
+
+        // Horizontal industrial ribbon windows
+        const rows = 4;
+        const rh = 512 / rows;
+        for (let r = 0; r < rows; r++) {
+          ctx.fillStyle = '#475569';
+          ctx.fillRect(0, r * rh, 256, 14);
+          ctx.fillStyle = '#1e293b';
+          ctx.fillRect(14, r * rh + 26, 228, rh * 0.42);
+          // Steel mullions
+          ctx.fillStyle = '#cbd5e1';
+          for (let x = 14; x <= 242; x += 28) {
+            ctx.fillRect(x, r * rh + 26, 3, rh * 0.42);
+          }
+        }
+      } else if (style === 'residential_modern') {
+        // Modern residential apartment tower with glass balconies
+        ctx.fillStyle = '#cbd5e1';
+        ctx.fillRect(0, 0, 256, 512);
+
+        const cols = 6;
+        const rows = 14;
+        const cw = 256 / cols;
+        const rh = 512 / rows;
+
+        for (let r = 0; r < rows; r++) {
+          ctx.fillStyle = '#64748b';
+          ctx.fillRect(0, r * rh, 256, 4);
+          for (let c = 0; c < cols; c++) {
+            ctx.fillStyle = '#1e293b';
+            ctx.fillRect(c * cw + 5, r * rh + 7, cw - 10, rh - 14);
+            if ((r + c * 3) % 4 === 0) {
+              ctx.fillStyle = 'rgba(254, 240, 138, 0.45)';
+              ctx.fillRect(c * cw + 7, r * rh + 9, cw - 14, rh - 18);
+            }
+            ctx.fillStyle = 'rgba(56, 189, 248, 0.35)';
+            ctx.fillRect(c * cw + 3, r * rh + rh - 10, cw - 6, 8);
+          }
+        }
+      } else {
+        // Older Taiwanese walk-up apartment / shophouse
+        ctx.fillStyle = style === 'old_shophouse' ? '#b8a99a' : '#d6ccc2';
+        ctx.fillRect(0, 0, 256, 512);
+
+        const cols = 5;
+        const rows = 8;
+        const cw = 256 / cols;
+        const rh = 512 / rows;
+
+        for (let r = 0; r < rows; r++) {
+          ctx.fillStyle = '#8d8177';
+          ctx.fillRect(0, r * rh, 256, 4);
+          for (let c = 0; c < cols; c++) {
+            ctx.fillStyle = '#293241';
+            ctx.fillRect(c * cw + 7, r * rh + 12, cw - 14, rh - 24);
+            ctx.strokeStyle = '#e2e8f0';
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(c * cw + 7, r * rh + 12, cw - 14, rh - 24);
+          }
+        }
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      return tex;
+    }
+
+    /**
+     * ============================================================================
+     * 3D Scene Initialization & Sanchong Urban Context
+     * ============================================================================
+     */
+
+    function initScene() {
+      const container = document.getElementById('canvas-container');
+
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x090e1a);
+      scene.fog = new THREE.FogExp2(0x0d1629, 0.0012);
+
+      camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 1, 1800);
+      camera.position.set(135, 145, 165);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+      renderer.setSize(container.clientWidth, container.clientHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      container.appendChild(renderer.domElement);
+
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.07;
+      controls.maxPolarAngle = Math.PI / 2 - 0.035;
+      controls.minDistance = 24;
+      controls.maxDistance = 460;
+      controls.target.set(0, 0, 5);
+
+      controls.addEventListener('start', () => {
+        cameraTween = null;
+      });
+
+      raycaster = new THREE.Raycaster();
+      mouse = new THREE.Vector2();
+
+      setupLights();
+      buildTerrainRoadsAndLandmarks();
+
+      // Load all 30 Sanchong parcels
+      INITIAL_PARCELS.forEach((raw) => {
+        const parcel = normalizeRectParcel(raw);
+        appState.parcels.push(parcel);
+        createParcel3D(parcel);
+      });
+
+      scene.add(roadObjectsGroup);
+      scene.add(dimensionGroup);
+
+      populateQuickSelect();
+      applyFilters();
+
+      // Select flagship corner parcel 興穀段 0412-0000 on startup
+      setTimeout(() => {
+        selectParcel('0412-0000', false);
+      }, 250);
+
+      setupEventListeners();
+    }
+
+    function setupLights() {
+      const hemiLight = new THREE.HemisphereLight(0xe0f2fe, 0x1e293b, 0.9);
+      hemiLight.position.set(0, 250, 0);
+      scene.add(hemiLight);
+
+      const dirLight = new THREE.DirectionalLight(0xfffbeb, 1.05);
+      dirLight.position.set(150, 230, 130);
+      dirLight.castShadow = true;
+      dirLight.shadow.mapSize.width = 2048;
+      dirLight.shadow.mapSize.height = 2048;
+      dirLight.shadow.camera.near = 20;
+      dirLight.shadow.camera.far = 650;
+      const d = 200;
+      dirLight.shadow.camera.left = -d;
+      dirLight.shadow.camera.right = d;
+      dirLight.shadow.camera.top = d;
+      dirLight.shadow.camera.bottom = -d;
+      dirLight.shadow.bias = -0.0005;
+      scene.add(dirLight);
+    }
+
+    /**
+     * Builds the ground plane, Sanchong road network (with Guangfu Rd. central median trees),
+     * MRT Xianse Temple Station plaza marker, and distant Erchong Floodway / Guanyinshan horizon
+     */
+    function buildTerrainRoadsAndLandmarks() {
+      // Base terrain plane (used for mouse coordinate raycasting as well)
+      const groundGeo = new THREE.PlaneGeometry(1800, 1800);
+      const groundMat = new THREE.MeshStandardMaterial({
+        color: 0x111827,
+        roughness: 0.94,
+        metalness: 0.04
+      });
+      groundPlaneMesh = new THREE.Mesh(groundGeo, groundMat);
+      groundPlaneMesh.rotation.x = -Math.PI / 2;
+      groundPlaneMesh.position.y = -0.15;
+      groundPlaneMesh.receiveShadow = true;
+      scene.add(groundPlaneMesh);
+
+      // Urban district concrete sidewalk deck
+      const deckGeo = new THREE.BoxGeometry(360, 0.24, 320);
+      const deckMat = new THREE.MeshStandardMaterial({
+        color: 0x334155,
+        roughness: 0.86
+      });
+      const deckMesh = new THREE.Mesh(deckGeo, deckMat);
+      deckMesh.position.set(0, -0.02, -5);
+      deckMesh.receiveShadow = true;
+      scene.add(deckMesh);
+
+      // Asphalt & lane materials
+      const asphaltMat = new THREE.MeshStandardMaterial({
+        color: 0x1a202c,
+        roughness: 0.88,
+        metalness: 0.08
+      });
+      const yellowLineMat = new THREE.MeshBasicMaterial({ color: 0xfacc15 });
+      const whiteLineMat = new THREE.MeshBasicMaterial({ color: 0xe2e8f0 });
+      const medianMat = new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.85 });
+      const trunkMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.9 });
+      const leafMat = new THREE.MeshStandardMaterial({ color: 0x22c55e, roughness: 0.8 });
+
+      ROADS_DATA.forEach((road) => {
+        const w = road.xMax - road.xMin;
+        const d = road.zMax - road.zMin;
+        const cx = (road.xMin + road.xMax) / 2;
+        const cz = (road.zMin + road.zMax) / 2;
+
+        const roadMesh = new THREE.Mesh(new THREE.BoxGeometry(w, 0.16, d), asphaltMat);
+        roadMesh.position.set(cx, 0.05, cz);
+        roadMesh.receiveShadow = true;
+        roadObjectsGroup.add(roadMesh);
+
+        // Central Landscaped Median Island for Guangfu Rd. (25m) & Chongxin Rd. Sec. 5 (30m)
+        if (road.hasMedian) {
+          if (road.orientation === 'NS') {
+            const med = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.32, d - 4), medianMat);
+            med.position.set(cx, 0.18, cz);
+            roadObjectsGroup.add(med);
+
+            // Street trees along Guangfu Rd. median
+            for (let z = road.zMin + 8; z <= road.zMax - 8; z += 16) {
+              const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.3, 1.8, 6), trunkMat);
+              trunk.position.set(cx, 1.0, z);
+              const crown = new THREE.Mesh(new THREE.DodecahedronGeometry(1.4, 1), leafMat);
+              crown.position.set(cx, 2.5, z);
+              roadObjectsGroup.add(trunk, crown);
+            }
+          } else {
+            const med = new THREE.Mesh(new THREE.BoxGeometry(w - 6, 0.32, 2.0), medianMat);
+            med.position.set(cx, 0.18, cz);
+            roadObjectsGroup.add(med);
+
+            for (let x = road.xMin + 14; x <= road.xMax - 14; x += 22) {
+              if (Math.abs(x) < 16) continue; // Keep Guangfu intersection clear
+              const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.32, 1.9, 6), trunkMat);
+              trunk.position.set(x, 1.05, cz);
+              const crown = new THREE.Mesh(new THREE.DodecahedronGeometry(1.5, 1), leafMat);
+              crown.position.set(x, 2.6, cz);
+              roadObjectsGroup.add(trunk, crown);
+            }
+          }
+        } else if (road.width >= 12) {
+          // Double yellow centerline
+          if (road.orientation === 'EW') {
+            [-0.22, 0.22].forEach((offset) => {
+              const line = new THREE.Mesh(new THREE.PlaneGeometry(w - 4, 0.16), yellowLineMat);
+              line.rotation.x = -Math.PI / 2;
+              line.position.set(cx, 0.14, cz + offset);
+              roadObjectsGroup.add(line);
+            });
+          } else {
+            [-0.22, 0.22].forEach((offset) => {
+              const line = new THREE.Mesh(new THREE.PlaneGeometry(0.16, d - 4), yellowLineMat);
+              line.rotation.x = -Math.PI / 2;
+              line.position.set(cx + offset, 0.14, cz);
+              roadObjectsGroup.add(line);
+            });
+          }
+        } else {
+          // Dashed white centerline for 8m–10m streets
+          if (road.orientation === 'EW') {
+            for (let x = road.xMin + 4; x < road.xMax - 4; x += 7) {
+              const dash = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.15), whiteLineMat);
+              dash.rotation.x = -Math.PI / 2;
+              dash.position.set(x, 0.14, cz);
+              roadObjectsGroup.add(dash);
+            }
+          } else {
+            for (let z = road.zMin + 4; z < road.zMax - 4; z += 7) {
+              const dash = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 3.2), whiteLineMat);
+              dash.rotation.x = -Math.PI / 2;
+              dash.position.set(cx, 0.14, z);
+              roadObjectsGroup.add(dash);
+            }
+          }
+        }
+
+        // Crisp HTML Projected Road Label
+        if (road.labelPos) {
+          addProjectedLabel(
+            `<span class="px-2 py-0.5 rounded-md bg-slate-950/85 border border-slate-400/40 text-slate-200 text-[11px] font-semibold shadow-lg">${road.name} <span class="text-cyan-300">(${road.width}m)</span></span>`,
+            'road-label-item',
+            new THREE.Vector3(...road.labelPos),
+            { type: 'road' }
+          );
+        }
+      });
+
+      // MRT Xianse Temple Station Landmark Badge (捷運先嗇宮站) near Chongxin Rd. Sec. 5 & Guangfu Rd. Sec. 1
+      addProjectedLabel(
+        `<div class="px-2.5 py-1 rounded-lg bg-amber-950/90 border border-amber-400/70 text-amber-200 text-[11px] font-bold shadow-xl flex items-center gap-1">
+          <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+          <span>捷運先嗇宮站 (中和新蘆線)</span>
+        </div>`,
+        'landmark-label-item',
+        new THREE.Vector3(22, 6.5, 74.5),
+        { type: 'road' }
+      );
+
+      // Erchong Floodway Park Water & Green Belt hint on the far East horizon (二重疏洪道)
+      const riverMat = new THREE.MeshStandardMaterial({ color: 0x0c4a6e, roughness: 0.35, metalness: 0.4 });
+      const riverMesh = new THREE.Mesh(new THREE.PlaneGeometry(140, 1200), riverMat);
+      riverMesh.rotation.x = -Math.PI / 2;
+      riverMesh.position.set(340, -0.08, 0);
+      scene.add(riverMesh);
+
+      // Surrounding context massing blocks outside core district
+      const contextMat = new THREE.MeshStandardMaterial({
+        color: 0x1e293b,
+        roughness: 0.88,
+        transparent: true,
+        opacity: 0.65
+      });
+      const contextSlots = [
+        [-165, -42, 34, 34, 24],
+        [-165, 22, 34, 42, 28],
+        [-165, -92, 34, 34, 18],
+        [-165, 122, 34, 30, 22],
+        [165, -42, 34, 36, 30],
+        [165, 22, 34, 42, 26],
+        [165, -92, 34, 34, 20],
+        [165, 122, 34, 30, 24],
+        [-55, -135, 52, 28, 22],
+        [45, -135, 56, 28, 26]
+      ];
+      contextSlots.forEach(([x, z, w, d, h]) => {
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), contextMat);
+        mesh.position.set(x, h / 2, z);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        scene.add(mesh);
+      });
+    }
+
+    /**
+     * Normalizes a rectangular parcel into full polygon, area, depth, and frontage metrics
+     */
+    function normalizeRectParcel(raw) {
+      const width = Math.abs(raw.x2 - raw.x1);
+      const depth = Math.abs(raw.z2 - raw.z1);
+      const areaSqm = Number((width * depth).toFixed(2));
+      const areaPing = Number(sqmToPing(areaSqm).toFixed(2));
+      const cx = (raw.x1 + raw.x2) / 2;
+      const cz = (raw.z1 + raw.z2) / 2;
+
+      const polygon = [
+        [raw.x1, raw.z1],
+        [raw.x2, raw.z1],
+        [raw.x2, raw.z2],
+        [raw.x1, raw.z2]
+      ];
+
+      const maxFrontage = Math.max(...raw.frontages.map((f) => f.width));
+      const maxRoadWidth = Math.max(...raw.frontages.map((f) => f.roadWidth));
+      const avgDepth = Number((areaSqm / maxFrontage).toFixed(1));
+
+      return {
+        ...raw,
+        polygon,
+        center: [cx, cz],
+        width,
+        depth,
+        areaSqm,
+        areaPing,
+        maxFrontage,
+        maxRoadWidth,
+        avgDepth
+      };
+    }
+
+    /**
+     * Creates 3D geometry for a Land Parcel:
+     * 1. Zoning ground polygon
+     * 2. Cadastral gold border loop
+     * 3. Selection highlight ring
+     * 4. Crisp HTML projected parcel label
+     * 5. Detailed 3D Building / Factory / Park / Parking Lot
+     */
+    function createParcel3D(parcel) {
+      const zConf = ZONING_CONFIG[parcel.zoning] || ZONING_CONFIG['乙種工業區'];
+
+      const shape = new THREE.Shape();
+      parcel.polygon.forEach(([x, z], idx) => {
+        if (idx === 0) shape.moveTo(x, -z);
+        else shape.lineTo(x, -z);
+      });
+      shape.closePath();
+
+      // 1. Zoning Color Ground Plane
+      const zoningGeo = new THREE.ShapeGeometry(shape);
+      const zoningMat = new THREE.MeshStandardMaterial({
+        color: zConf.colorHex,
+        transparent: true,
+        opacity: 0.44,
+        roughness: 0.72,
+        side: THREE.DoubleSide
+      });
+      const zoningMesh = new THREE.Mesh(zoningGeo, zoningMat);
+      zoningMesh.rotation.x = -Math.PI / 2;
+      zoningMesh.position.y = 0.16;
+      zoningMesh.receiveShadow = true;
+      zoningMesh.userData = { parcelId: parcel.id };
+      scene.add(zoningMesh);
+
+      // 2. Cadastral Gold Boundary Line
+      const borderPoints = parcel.polygon.map(([x, z]) => new THREE.Vector3(x, 0.24, z));
+      borderPoints.push(borderPoints[0].clone());
+      const borderGeo = new THREE.BufferGeometry().setFromPoints(borderPoints);
+      const borderMat = new THREE.LineBasicMaterial({ color: 0xfde047 });
+      const borderLine = new THREE.Line(borderGeo, borderMat);
+      scene.add(borderLine);
+
+      // 3. Selection / Filter Highlight Frame
+      const highlightGroup = new THREE.Group();
+      for (let i = 0; i < parcel.polygon.length; i++) {
+        const [xA, zA] = parcel.polygon[i];
+        const [xB, zB] = parcel.polygon[(i + 1) % parcel.polygon.length];
+        const segLen = Math.hypot(xB - xA, zB - zA);
+        const bar = new THREE.Mesh(
+          new THREE.BoxGeometry(segLen, 0.45, 0.55),
+          new THREE.MeshBasicMaterial({ color: 0x38bdf8 })
+        );
+        bar.position.set((xA + xB) / 2, 0.35, (zA + zB) / 2);
+        bar.rotation.y = -Math.atan2(zB - zA, xB - xA);
+        highlightGroup.add(bar);
+      }
+      highlightGroup.visible = false;
+      scene.add(highlightGroup);
+
+      // 4. 3D Building / Park / Vacant Lot Massing
+      const buildingGroup = new THREE.Group();
+      const buildingMaterials = [];
+      const bStyle = parcel.building.style;
+      const floors = parcel.building.floors || 0;
+      const bldHeight = floors > 0 ? floors * 3.3 : 1.5;
+
+      if (bStyle === 'park') {
+        const trunkMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.9, transparent: true, opacity: 1 });
+        const foliageMat = new THREE.MeshStandardMaterial({ color: 0x16a34a, roughness: 0.8, transparent: true, opacity: 1 });
+        buildingMaterials.push(trunkMat, foliageMat);
+
+        const offsets = [
+          [-12, -9], [-2, -10], [10, -8],
+          [-11, 8], [1, 9], [11, 7], [-3, 0]
+        ];
+        offsets.forEach(([dx, dz]) => {
+          const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.5, 2.8, 8), trunkMat);
+          trunk.position.set(parcel.center[0] + dx, 1.5, parcel.center[1] + dz);
+          trunk.castShadow = true;
+          const crown = new THREE.Mesh(new THREE.DodecahedronGeometry(2.5, 1), foliageMat);
+          crown.position.set(parcel.center[0] + dx, 4.3, parcel.center[1] + dz);
+          crown.castShadow = true;
+          buildingGroup.add(trunk, crown);
+        });
+      } else if (bStyle === 'vacant_parking') {
+        // Parking lot striped bays & perimeter low fence
+        const lineMat = new THREE.MeshBasicMaterial({ color: 0xe2e8f0, transparent: true, opacity: 0.75 });
+        buildingMaterials.push(lineMat);
+        for (let dx = -12; dx <= 12; dx += 4.5) {
+          const stall = new THREE.Mesh(new THREE.PlaneGeometry(0.25, 5.2), lineMat);
+          stall.rotation.x = -Math.PI / 2;
+          stall.position.set(parcel.center[0] + dx, 0.22, parcel.center[1] - 6);
+          buildingGroup.add(stall);
+        }
+      } else if (floors > 0) {
+        const bw = Math.max(6, (parcel.width || 16) - 3.4);
+        const bd = Math.max(6, (parcel.depth || 16) - 3.4);
+        const bh = bldHeight;
+
+        const facadeTex = createBuildingFacadeTexture(bStyle);
+        facadeTex.repeat.set(Math.max(1, Math.round(bw / 11)), Math.max(1, Math.round(floors / 4)));
+
+        const wallMat = new THREE.MeshStandardMaterial({
+          map: facadeTex,
+          roughness: bStyle === 'tech_tower' ? 0.24 : 0.74,
+          metalness: bStyle === 'tech_tower' ? 0.45 : 0.1,
+          transparent: true,
+          opacity: 1.0
+        });
+        const roofMat = new THREE.MeshStandardMaterial({
+          color: bStyle === 'factory_rc' ? 0x64748b : 0x475569,
+          roughness: 0.85,
+          transparent: true,
+          opacity: 1.0
+        });
+        buildingMaterials.push(wallMat, roofMat);
+
+        const mainBox = new THREE.Mesh(
+          new THREE.BoxGeometry(bw, bh, bd),
+          [wallMat, wallMat, roofMat, roofMat, wallMat, wallMat]
+        );
+        mainBox.position.set(parcel.center[0], bh / 2 + 0.18, parcel.center[1]);
+        mainBox.castShadow = true;
+        mainBox.receiveShadow = true;
+        mainBox.userData = { parcelId: parcel.id };
+        buildingGroup.add(mainBox);
+
+        // Rooftop penthouse / mechanical crown for mid/high-rise buildings
+        if (floors >= 6) {
+          const pent = new THREE.Mesh(new THREE.BoxGeometry(bw * 0.42, 3.0, bd * 0.42), roofMat);
+          pent.position.set(parcel.center[0], bh + 1.68, parcel.center[1]);
+          pent.castShadow = true;
+          pent.userData = { parcelId: parcel.id };
+          buildingGroup.add(pent);
+        }
+      }
+
+      scene.add(buildingGroup);
+
+      // 5. Crisp HTML Projected Parcel Label
+      const labelEntry = addProjectedLabel(
+        `<span class="px-1.5 py-0.5 rounded bg-slate-950/85 border border-amber-300/60 text-amber-200 text-[10px] font-bold tracking-tight shadow">${parcel.section} ${parcel.id}</span>`,
+        'parcel-label-item',
+        new THREE.Vector3(parcel.center[0], bldHeight + 2.5, parcel.center[1]),
+        { type: 'parcel', parcelId: parcel.id }
+      );
+
+      parcelObjectsMap.set(parcel.id, {
+        data: parcel,
+        zoningMesh,
+        borderLine,
+        highlightGroup,
+        buildingGroup,
+        buildingMaterials,
+        labelEntry
+      });
+    }
+
+    /**
+     * ============================================================================
+     * 3D Frontage (面寬) & Road Width (路寬) 立體標尺 + Projected Badges
+     * ============================================================================
+     */
+
+    function clearDimensions3D() {
+      while (dimensionGroup.children.length > 0) {
+        dimensionGroup.remove(dimensionGroup.children[0]);
+      }
+      removeProjectedLabelsByType('dimension');
+    }
+
+    function renderParcelDimensions3D(parcel) {
+      clearDimensions3D();
+      if (!parcel || !appState.layers.roads || !parcel.frontages) return;
+
+      const orangeMat = new THREE.MeshBasicMaterial({ color: 0xf97316 }); // Bright Orange
+      const cyanMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4 });   // Bright Cyan
+
+      parcel.frontages.forEach((f, idx) => {
+        // 1. Orange Frontage Ruler Bar along parcel boundary
+        if (f.edge && f.edge.length === 2) {
+          const [[x1, z1], [x2, z2]] = f.edge;
+          const len = Math.hypot(x2 - x1, z2 - z1);
+          const angle = -Math.atan2(z2 - z1, x2 - x1);
+          const mx = (x1 + x2) / 2;
+          const mz = (z1 + z2) / 2;
+
+          const bar = new THREE.Mesh(new THREE.BoxGeometry(len, 0.5, 0.65), orangeMat);
+          bar.position.set(mx, 0.85, mz);
+          bar.rotation.y = angle;
+          dimensionGroup.add(bar);
+
+          [[x1, z1], [x2, z2]].forEach(([ex, ez]) => {
+            const tick = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.8, 2.1), orangeMat);
+            tick.position.set(ex, 0.95, ez);
+            tick.rotation.y = angle;
+            dimensionGroup.add(tick);
+          });
+
+          const prefix = parcel.frontages.length > 1 ? (idx === 0 ? '主面寬' : '側面寬') : '面寬';
+          addProjectedLabel(
+            `<div class="px-2.5 py-1 rounded-lg bg-orange-950/95 border-2 border-orange-400 text-orange-100 text-xs font-bold shadow-2xl flex items-center gap-1">
+              <span class="w-2 h-2 rounded-full bg-orange-400"></span>
+              <span>${prefix} ${f.width.toFixed(1)}m</span>
+            </div>`,
+            'dim-label-item',
+            new THREE.Vector3(mx, 3.2, mz),
+            { type: 'dimension' }
+          );
+        }
+
+        // 2. Cyan Road Width Ruler Bar spanning across adjacent road
+        if (f.roadSpan && f.roadSpan.length === 2) {
+          const [[rx1, rz1], [rx2, rz2]] = f.roadSpan;
+          const rLen = Math.hypot(rx2 - rx1, rz2 - rz1);
+          const rAngle = -Math.atan2(rz2 - rz1, rx2 - rx1);
+          const rmx = (rx1 + rx2) / 2;
+          const rmz = (rz1 + rz2) / 2;
+
+          const rBar = new THREE.Mesh(new THREE.BoxGeometry(rLen, 0.4, 0.55), cyanMat);
+          rBar.position.set(rmx, 0.65, rmz);
+          rBar.rotation.y = rAngle;
+          dimensionGroup.add(rBar);
+
+          [[rx1, rz1], [rx2, rz2]].forEach(([tx, tz]) => {
+            const tick = new THREE.Mesh(new THREE.BoxGeometry(0.45, 1.5, 2.4), cyanMat);
+            tick.position.set(tx, 0.75, tz);
+            tick.rotation.y = rAngle;
+            dimensionGroup.add(tick);
+          });
+
+          addProjectedLabel(
+            `<div class="px-2.5 py-1 rounded-lg bg-cyan-950/95 border-2 border-cyan-400 text-cyan-100 text-xs font-bold shadow-2xl flex items-center gap-1">
+              <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+              <span>路寬 ${f.roadWidth.toFixed(1)}m｜${f.roadName}</span>
+            </div>`,
+            'dim-label-item',
+            new THREE.Vector3(rmx, 2.6, rmz),
+            { type: 'dimension' }
+          );
+        }
+      });
+    }
+
+    /**
+     * ============================================================================
+     * Selection, Right Detail Drawer & Interactive FAR Calculator
+     * ============================================================================
+     */
+
+    function selectParcel(parcelId, shouldFlyTo = true) {
+      appState.selectedParcelId = parcelId;
+
+      parcelObjectsMap.forEach((obj, id) => {
+        const isSelected = id === parcelId;
+        obj.highlightGroup.visible = isSelected;
+        if (isSelected) {
+          obj.highlightGroup.children.forEach((m) => m.material.color.setHex(0x38bdf8));
+          obj.zoningMesh.material.opacity = 0.68;
+        } else {
+          obj.zoningMesh.material.opacity = 0.44;
+        }
+      });
+
+      const targetObj = parcelObjectsMap.get(parcelId);
+      if (!targetObj) return;
+
+      const parcel = targetObj.data;
+      renderParcelDimensions3D(parcel);
+      updateRightDrawer(parcel);
+
+      document.getElementById('right-drawer').classList.remove('translate-x-[120%]');
+
+      if (shouldFlyTo) {
+        const [cx, cz] = parcel.center;
+        tweenCameraTo(
+          new THREE.Vector3(cx + 52, 68, cz + 64),
+          new THREE.Vector3(cx, 2, cz)
+        );
+      }
+    }
+
+    function deselectParcel() {
+      appState.selectedParcelId = null;
+      clearDimensions3D();
+      parcelObjectsMap.forEach((obj) => {
+        obj.highlightGroup.visible = false;
+        obj.zoningMesh.material.opacity = 0.44;
+      });
+      document.getElementById('right-drawer').classList.add('translate-x-[120%]');
+    }
+
+    function updateRightDrawer(parcel) {
+      const zConf = ZONING_CONFIG[parcel.zoning] || ZONING_CONFIG['乙種工業區'];
+
+      document.getElementById('detail-district').textContent = `新北市三重區 ${parcel.section}`;
+      document.getElementById('detail-parcel-title').textContent = `${parcel.id} 地號`;
+
+      // Feature Tags
+      const tagsRow = document.getElementById('detail-tags-row');
+      tagsRow.innerHTML = '';
+      const displayTags = parcel.tags && parcel.tags.length
+        ? parcel.tags
+        : [parcel.isCorner ? '角地・雙面臨路' : '單面臨路基地'];
+      displayTags.forEach((tag) => {
+        const span = document.createElement('span');
+        const isHighlight = tag.includes('角地') || tag.includes('25米') || tag.includes('30米');
+        span.className = isHighlight
+          ? 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/25 text-amber-300 border border-amber-400/40'
+          : 'px-2 py-0.5 rounded-full text-[10px] font-medium bg-sky-500/20 text-sky-200 border border-sky-400/30';
+        span.textContent = tag;
+        tagsRow.appendChild(span);
+      });
+
+      document.getElementById('detail-area-ping').textContent = `${parcel.areaPing.toLocaleString()} 坪`;
+      document.getElementById('detail-area-sqm').textContent = `${parcel.areaSqm.toLocaleString()} ㎡`;
+
+      const zPill = document.getElementById('detail-zoning-pill');
+      zPill.className = `inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${zConf.cssBg} ${zConf.cssText} border ${zConf.cssBorder}`;
+      document.getElementById('detail-zoning-dot').className = `w-2 h-2 rounded-full ${zConf.dotBg}`;
+      document.getElementById('detail-zoning-name').textContent = parcel.zoning;
+      document.getElementById('detail-zone-rule').textContent = `建蔽率 ${parcel.bcr}% / 容積率 ${parcel.far}%`;
+
+      document.getElementById('detail-avg-depth').textContent = `${parcel.avgDepth}m`;
+
+      // Frontage & Road Width Breakdown
+      const fList = document.getElementById('detail-frontage-list');
+      fList.innerHTML = '';
+      parcel.frontages.forEach((f, idx) => {
+        const card = document.createElement('div');
+        card.className = 'bg-slate-900/75 rounded-lg p-2.5 border border-white/10 flex items-center justify-between gap-2';
+        card.innerHTML = `
+          <div class="space-y-0.5">
+            <div class="flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-orange-400"></span>
+              <span class="text-[11px] text-slate-300">${f.label || (idx === 0 ? '主要臨路面寬' : '次要臨路面寬')}</span>
+            </div>
+            <div class="text-sm font-bold text-orange-300 pl-3.5">${f.width.toFixed(1)} 公尺 (m)</div>
+          </div>
+          <div class="text-right space-y-0.5">
+            <div class="flex items-center justify-end gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+              <span class="text-[11px] text-slate-300">${f.roadName}</span>
+            </div>
+            <div class="text-xs font-semibold text-cyan-300">路寬 ${f.roadWidth}m <span class="text-[10px] text-slate-400">(${f.roadType})</span></div>
+          </div>
+        `;
+        fList.appendChild(card);
+      });
+
+      recalculateFloorArea(parcel);
+
+      const b = parcel.building || {};
+      document.getElementById('detail-building-use').textContent = b.use || '都市計畫使用分區';
+      document.getElementById('detail-building-floors').textContent =
+        b.floors > 0 ? `地上 ${b.floors} 層 / 地下 ${b.basement || 0} 層` : '無地上建築物';
+      document.getElementById('detail-building-age').textContent = b.age > 0 ? `約 ${b.age} 年` : '—';
+      document.getElementById('detail-land-value').textContent = b.landValuePing ? `約 ${b.landValuePing} 萬 / 坪` : '依當期公告現值';
+      document.getElementById('detail-dev-note').textContent = b.devNote || '具備整合開發評估價值';
+    }
+
+    function recalculateFloorArea(parcel) {
+      if (!parcel) return;
+      const bcr = parcel.bcr || 60;
+      const baseFar = parcel.far || 210;
+
+      let bonusMultiplier = 1.0;
+      const activeBonuses = [];
+      if (appState.bonuses.industrial20) {
+        bonusMultiplier += 0.2;
+        activeBonuses.push('工業區立體化 +20%');
+      }
+      if (appState.bonuses.renewal30) {
+        bonusMultiplier += 0.3;
+        activeBonuses.push('都更/危老 +30%');
+      }
+
+      const effectiveFar = Math.round(baseFar * bonusMultiplier);
+
+      document.getElementById('detail-bcr').textContent = `${bcr}%`;
+      document.getElementById('detail-far').textContent =
+        activeBonuses.length > 0 ? `${effectiveFar}% (基準 ${baseFar}%)` : `${baseFar}%`;
+
+      const footprintSqm = parcel.areaSqm * (bcr / 100);
+      const footprintPing = parcel.areaPing * (bcr / 100);
+
+      const baseGfaSqm = parcel.areaSqm * (baseFar / 100);
+      const baseGfaPing = parcel.areaPing * (baseFar / 100);
+
+      const finalGfaSqm = parcel.areaSqm * (effectiveFar / 100);
+      const finalGfaPing = parcel.areaPing * (effectiveFar / 100);
+
+      document.getElementById('calc-max-footprint-ping').textContent = `${footprintPing.toFixed(2)} 坪`;
+      document.getElementById('calc-max-footprint-sqm').textContent = `${footprintSqm.toFixed(2)} ㎡`;
+
+      document.getElementById('calc-base-gfa-ping').textContent = `${baseGfaPing.toFixed(2)} 坪`;
+      document.getElementById('calc-base-gfa-sqm').textContent = `${baseGfaSqm.toFixed(2)} ㎡`;
+
+      document.getElementById('calc-bonus-summary').textContent =
+        activeBonuses.length > 0 ? `套用：${activeBonuses.join(' + ')}` : '目前套用基準容積 (+0%)';
+      document.getElementById('calc-final-gfa-ping').textContent = `${finalGfaPing.toFixed(2)} 坪`;
+      document.getElementById('calc-final-gfa-sqm').textContent = `${finalGfaSqm.toFixed(2)} ㎡`;
+    }
+
+    /**
+     * ============================================================================
+     * Left Panel Filters & Search
+     * ============================================================================
+     */
+
+    function applyFilters() {
+      const { zoning, minFrontage, minRoadWidth, cornerOnly } = appState.filters;
+      const isFiltering = zoning !== 'ALL' || minFrontage > 0 || minRoadWidth > 0 || cornerOnly;
+
+      const matched = [];
+
+      appState.parcels.forEach((p) => {
+        const zConf = ZONING_CONFIG[p.zoning] || { category: '其他' };
+        const zMatch = zoning === 'ALL' || zConf.category === zoning || p.zoning === zoning;
+        const fMatch = p.maxFrontage >= minFrontage;
+        const rMatch = p.maxRoadWidth >= minRoadWidth;
+        const cMatch = !cornerOnly || p.isCorner;
+        const isMatch = zMatch && fMatch && rMatch && cMatch;
+
+        if (isMatch) matched.push(p);
+
+        const obj = parcelObjectsMap.get(p.id);
+        if (!obj) return;
+
+        if (!isFiltering) {
+          if (p.id !== appState.selectedParcelId) {
+            obj.highlightGroup.visible = false;
+            obj.zoningMesh.material.opacity = 0.44;
+          }
+        } else {
+          if (isMatch) {
+            obj.highlightGroup.visible = true;
+            if (p.id !== appState.selectedParcelId) {
+              obj.highlightGroup.children.forEach((m) => m.material.color.setHex(0x10b981));
+            }
+            obj.zoningMesh.material.opacity = 0.65;
+          } else {
+            if (p.id !== appState.selectedParcelId) {
+              obj.highlightGroup.visible = false;
+            }
+            obj.zoningMesh.material.opacity = 0.14;
+          }
+        }
+      });
+
+      document.getElementById('filter-match-count').textContent = `${matched.length} 筆`;
+
+      const listEl = document.getElementById('filter-match-list');
+      listEl.innerHTML = '';
+      matched.forEach((p) => {
+        const btn = document.createElement('button');
+        btn.className = 'w-full text-left px-2.5 py-1.5 rounded-lg bg-slate-900/75 hover:bg-sky-500/25 border border-white/5 hover:border-sky-400/40 transition flex items-center justify-between gap-1 text-[11px]';
+        btn.innerHTML = `
+          <span class="font-semibold text-white truncate">${p.section} ${p.id}</span>
+          <span class="text-orange-300 font-medium shrink-0">面${p.maxFrontage}m・路${p.maxRoadWidth}m</span>
+        `;
+        btn.addEventListener('click', () => selectParcel(p.id, true));
+        listEl.appendChild(btn);
+      });
+    }
+
+    function populateQuickSelect() {
+      const sel = document.getElementById('quick-parcel-select');
+      sel.innerHTML = '<option value="">快速定位宗地...</option>';
+      appState.parcels.forEach((p) => {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = `${p.section} ${p.id}｜${p.zoning} (${p.areaPing}坪)`;
+        sel.appendChild(opt);
+      });
+    }
+
+    /**
+     * ============================================================================
+     * GeoJSON Import & Export
+     * ============================================================================
+     */
+
+    function exportCurrentParcelsGeoJSON() {
+      const fc = {
+        type: 'FeatureCollection',
+        name: '新北市三重區光復路周邊地籍圖資',
+        crs: { type: 'name', properties: { name: 'urn:ogc:def:crs:OGC:1.3:CRS84' } },
+        features: appState.parcels.map((p) => {
+          const coords = p.polygon.map(([x, z]) => [
+            Number((BASE_LNG + x / METERS_PER_DEG_LNG).toFixed(6)),
+            Number((BASE_LAT - z / METERS_PER_DEG_LAT).toFixed(6))
+          ]);
+          coords.push(coords[0]);
+          return {
+            type: 'Feature',
+            properties: {
+              district: '新北市三重區',
+              section: p.section,
+              parcel_id: p.id,
+              zoning: p.zoning,
+              bcr: p.bcr,
+              far: p.far,
+              area_sqm: p.areaSqm,
+              area_ping: p.areaPing,
+              frontage: p.maxFrontage,
+              road_width: p.maxRoadWidth,
+              is_corner: p.isCorner,
+              building_use: p.building.use,
+              floors: p.building.floors
+            },
+            geometry: {
+              type: 'Polygon',
+              coordinates: [coords]
+            }
+          };
+        })
+      };
+
+      const blob = new Blob([JSON.stringify(fc, null, 2)], { type: 'application/geo+json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'Sanchong_Guangfu_Cadastral_3D.geojson';
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast('已下載三重區光復路周邊 30 筆範例 GeoJSON 圖資！', 'success');
+    }
+
+    function importGeoJSONObject(geojson) {
+      try {
+        const features =
+          geojson.type === 'FeatureCollection'
+            ? geojson.features
+            : geojson.type === 'Feature'
+            ? [geojson]
+            : [];
+
+        if (!features.length) {
+          showToast('GeoJSON 檔案中未偵測到有效的 Feature 圖徵', 'warn');
+          return;
+        }
+
+        let allCoords = [];
+        features.forEach((feat) => {
+          if (!feat.geometry) return;
+          if (feat.geometry.type === 'Polygon') allCoords.push(...feat.geometry.coordinates[0]);
+          else if (feat.geometry.type === 'MultiPolygon') {
+            feat.geometry.coordinates.forEach((poly) => allCoords.push(...poly[0]));
+          }
+        });
+
+        if (!allCoords.length) {
+          showToast('僅支援 Polygon 或 MultiPolygon 類型之地籍多邊形', 'warn');
+          return;
+        }
+
+        const xs = allCoords.map((c) => c[0]);
+        const ys = allCoords.map((c) => c[1]);
+        const minX = Math.min(...xs);
+        const maxX = Math.max(...xs);
+        const minY = Math.min(...ys);
+        const maxY = Math.max(...ys);
+        const midX = (minX + maxX) / 2;
+        const midY = (minY + maxY) / 2;
+
+        // Check if coordinates are WGS84 lon/lat near Sanchong (121.47, 25.05) or generic degrees
+        const isGeographic = Math.abs(midX) <= 180 && Math.abs(midY) <= 90 && (maxX - minX) < 1;
+        const isNearSanchong = isGeographic && Math.abs(midX - BASE_LNG) < 0.03 && Math.abs(midY - BASE_LAT) < 0.03;
+
+        let importedCount = 0;
+        let lastImportedId = null;
+
+        features.forEach((feat, idx) => {
+          if (!feat.geometry) return;
+          const ring =
+            feat.geometry.type === 'Polygon'
+              ? feat.geometry.coordinates[0]
+              : feat.geometry.type === 'MultiPolygon'
+              ? feat.geometry.coordinates[0][0]
+              : null;
+          if (!ring || ring.length < 3) return;
+
+          const polyXZ = ring.slice(0, ring.length - 1).map(([rx, ry]) => {
+            if (isNearSanchong) {
+              return [
+                Number(((rx - BASE_LNG) * METERS_PER_DEG_LNG).toFixed(2)),
+                Number(((BASE_LAT - ry) * METERS_PER_DEG_LAT).toFixed(2))
+              ];
+            } else if (isGeographic) {
+              return [
+                Number((118 + (rx - midX) * METERS_PER_DEG_LNG).toFixed(2)),
+                Number((-118 - (ry - midY) * METERS_PER_DEG_LAT).toFixed(2))
+              ];
+            }
+            return [Number((118 + (rx - midX)).toFixed(2)), Number((-118 - (ry - midY)).toFixed(2))];
+          });
+
+          // Shoelace area calculation
+          let area2 = 0;
+          for (let i = 0; i < polyXZ.length; i++) {
+            const [x1, z1] = polyXZ[i];
+            const [x2, z2] = polyXZ[(i + 1) % polyXZ.length];
+            area2 += x1 * z2 - x2 * z1;
+          }
+          const areaSqm = Number((Math.abs(area2) / 2).toFixed(2)) || 500;
+          const areaPing = Number(sqmToPing(areaSqm).toFixed(2));
+
+          const px = polyXZ.map((p) => p[0]);
+          const pz = polyXZ.map((p) => p[1]);
+          const cx = (Math.min(...px) + Math.max(...px)) / 2;
+          const cz = (Math.min(...pz) + Math.max(...pz)) / 2;
+
+          let longestEdge = [polyXZ[0], polyXZ[1]];
+          let maxEdgeLen = 0;
+          for (let i = 0; i < polyXZ.length; i++) {
+            const pA = polyXZ[i];
+            const pB = polyXZ[(i + 1) % polyXZ.length];
+            const d = Math.hypot(pB[0] - pA[0], pB[1] - pA[1]);
+            if (d > maxEdgeLen) {
+              maxEdgeLen = d;
+              longestEdge = [pA, pB];
+            }
+          }
+
+          const props = feat.properties || {};
+          const parcelId = String(props.parcel_id || props.地號 || `IMP-${String(idx + 1).padStart(4, '0')}`);
+          const section = props.section || props.地段 || '匯入段';
+          const zoning = ZONING_CONFIG[props.zoning] ? props.zoning : '乙種工業區';
+          const frontageVal = Number(props.frontage || maxEdgeLen.toFixed(1));
+          const roadWidthVal = Number(props.road_width || 15);
+
+          const parcel = {
+            id: parcelId,
+            section,
+            polygon: polyXZ,
+            center: [cx, cz],
+            width: Math.max(...px) - Math.min(...px),
+            depth: Math.max(...pz) - Math.min(...pz),
+            areaSqm,
+            areaPing,
+            zoning,
+            bcr: Number(props.bcr || ZONING_CONFIG[zoning].defaultBcr),
+            far: Number(props.far || ZONING_CONFIG[zoning].defaultFar),
+            isCorner: Boolean(props.is_corner),
+            maxFrontage: frontageVal,
+            maxRoadWidth: roadWidthVal,
+            avgDepth: Number((areaSqm / frontageVal).toFixed(1)),
+            tags: ['外部 GeoJSON 匯入圖資'],
+            frontages: [
+              {
+                label: '主要臨路面寬 (GeoJSON)',
+                width: frontageVal,
+                roadName: props.road_name || '計畫道路',
+                roadWidth: roadWidthVal,
+                roadType: '計畫道路',
+                edge: longestEdge,
+                roadSpan: null
+              }
+            ],
+            building: {
+              style: 'tech_tower',
+              floors: Number(props.floors || 6),
+              basement: 1,
+              use: props.building_use || props.use || '外部匯入地籍多邊形模型',
+              age: Number(props.age || 12),
+              landValuePing: Number(props.land_value || 62.0),
+              devNote: '由使用者匯入自訂 GeoJSON 空間資料'
+            }
+          };
+
+          if (parcelObjectsMap.has(parcel.id)) {
+            const old = parcelObjectsMap.get(parcel.id);
+            scene.remove(old.zoningMesh, old.borderLine, old.highlightGroup, old.buildingGroup);
+            old.labelEntry.el.remove();
+            projectedLabels = projectedLabels.filter((l) => l !== old.labelEntry);
+            appState.parcels = appState.parcels.filter((item) => item.id !== parcel.id);
+          }
+
+          appState.parcels.push(parcel);
+          createParcel3D(parcel);
+          importedCount++;
+          lastImportedId = parcel.id;
+        });
+
+        populateQuickSelect();
+        applyFilters();
+
+        if (lastImportedId) {
+          selectParcel(lastImportedId, true);
+          showToast(`成功匯入 ${importedCount} 筆 GeoJSON 宗地並套疊至 3D 場景！`, 'success');
+        }
+      } catch (err) {
+        console.error(err);
+        showToast('GeoJSON 解析失敗，請確認檔案格式是否正確', 'warn');
+      }
+    }
+
+    /**
+     * ============================================================================
+     * Camera Presets & Smooth Tweening
+     * ============================================================================
+     */
+
+    function tweenCameraTo(targetPos, targetLookAt, duration = 750) {
+      cameraTween = {
+        startPos: camera.position.clone(),
+        endPos: targetPos.clone(),
+        startTarget: controls.target.clone(),
+        endTarget: targetLookAt.clone(),
+        startTime: performance.now(),
+        duration
+      };
+    }
+
+    function setCameraPreset3D() {
+      tweenCameraTo(new THREE.Vector3(135, 145, 165), new THREE.Vector3(0, 0, 5));
+      updateViewButtons('3d');
+    }
+
+    function setCameraPreset2D() {
+      tweenCameraTo(new THREE.Vector3(0, 260, 0.8), new THREE.Vector3(0, 0, 5));
+      updateViewButtons('2d');
+    }
+
+    function setCameraPresetCorridor() {
+      // Looking straight along Guangfu Rd. Sec. 2 -> Sec. 1 -> Chongxin Rd. Sec. 5
+      tweenCameraTo(new THREE.Vector3(0, 58, -165), new THREE.Vector3(0, 0, 45));
+      updateViewButtons('corridor');
+    }
+
+    function updateViewButtons(active) {
+      const inactiveClass = 'px-2.5 py-1.5 rounded-xl text-xs font-medium text-slate-300 hover:bg-white/10 transition flex items-center gap-1.5';
+      const activeClass = 'px-2.5 py-1.5 rounded-xl text-xs font-medium bg-sky-500/25 text-sky-200 border border-sky-400/40 hover:bg-sky-500/40 transition flex items-center gap-1.5';
+      document.getElementById('btn-view-3d').className = active === '3d' ? activeClass : inactiveClass;
+      document.getElementById('btn-view-2d').className = active === '2d' ? activeClass : inactiveClass;
+      document.getElementById('btn-view-corridor').className =
+        active === 'corridor' ? `hidden sm:flex ${activeClass}` : `hidden sm:flex ${inactiveClass}`;
+    }
+
+    /**
+     * ============================================================================
+     * Raycasting & UI Event Listeners
+     * ============================================================================
+     */
+
+    function getIntersectedParcelId(clientX, clientY) {
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+
+      const candidates = [];
+      parcelObjectsMap.forEach((obj) => {
+        candidates.push(obj.zoningMesh);
+        if (appState.layers.buildings && appState.layers.buildingOpacity > 0.05) {
+          obj.buildingGroup.children.forEach((mesh) => candidates.push(mesh));
+        }
+      });
+
+      const hits = raycaster.intersectObjects(candidates, false);
+      if (hits.length > 0) {
+        return hits[0].object.userData.parcelId || null;
+      }
+      return null;
+    }
+
+    function updateCursorCoordinates(clientX, clientY) {
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+      const hits = raycaster.intersectObject(groundPlaneMesh, false);
+      if (hits.length > 0) {
+        const pt = hits[0].point;
+        const geo = sceneXZToGeo(pt.x, pt.z);
+        document.getElementById('coord-wgs84').textContent = geo.latStr;
+        document.getElementById('coord-twd97').textContent = geo.twdStr;
+      }
+    }
+
+    function setupEventListeners() {
+      const domEl = renderer.domElement;
+
+      domEl.addEventListener('pointerdown', (e) => {
+        pointerDownPos = { x: e.clientX, y: e.clientY };
+      });
+
+      domEl.addEventListener('pointerup', (e) => {
+        const dist = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
+        if (dist < 6) {
+          const hitId = getIntersectedParcelId(e.clientX, e.clientY);
+          if (hitId) {
+            selectParcel(hitId, false);
+          }
+        }
+      });
+
+      domEl.addEventListener('pointermove', (e) => {
+        updateCursorCoordinates(e.clientX, e.clientY);
+
+        const hitId = getIntersectedParcelId(e.clientX, e.clientY);
+        const tooltip = document.getElementById('hover-tooltip');
+
+        if (hitId) {
+          domEl.style.cursor = 'pointer';
+          const obj = parcelObjectsMap.get(hitId);
+          if (obj) {
+            const p = obj.data;
+            const zConf = ZONING_CONFIG[p.zoning] || ZONING_CONFIG['乙種工業區'];
+
+            document.getElementById('tt-parcel-id').textContent = `${p.section} ${p.id}`;
+            const badge = document.getElementById('tt-zoning-badge');
+            badge.textContent = p.zoning;
+            badge.className = `px-2 py-0.5 rounded-full text-[10px] font-semibold ${zConf.cssBg} ${zConf.cssText} border ${zConf.cssBorder}`;
+
+            document.getElementById('tt-area').textContent = `${p.areaPing} 坪`;
+            document.getElementById('tt-frontage').textContent = `${p.maxFrontage}m`;
+            document.getElementById('tt-road').textContent = `${p.maxRoadWidth}m`;
+            document.getElementById('tt-use').textContent = `現況：${p.building.use}`;
+
+            const cornerTag = document.getElementById('tt-corner-tag');
+            if (p.isCorner) cornerTag.classList.remove('hidden');
+            else cornerTag.classList.add('hidden');
+
+            tooltip.classList.remove('hidden');
+            const tx = Math.min(window.innerWidth - 230, e.clientX + 16);
+            const ty = Math.min(window.innerHeight - 135, e.clientY + 16);
+            tooltip.style.left = `${tx}px`;
+            tooltip.style.top = `${ty}px`;
+          }
+        } else {
+          domEl.style.cursor = 'grab';
+          tooltip.classList.add('hidden');
+        }
+      });
+
+      window.addEventListener('resize', () => {
+        const container = document.getElementById('canvas-container');
+        camera.aspect = container.clientWidth / container.clientHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(container.clientWidth, container.clientHeight);
+      });
+
+      // Camera View Presets
+      document.getElementById('btn-view-3d').addEventListener('click', setCameraPreset3D);
+      document.getElementById('btn-view-2d').addEventListener('click', setCameraPreset2D);
+      document.getElementById('btn-view-corridor').addEventListener('click', setCameraPresetCorridor);
+
+      // Compass North Reset
+      document.getElementById('btn-compass').addEventListener('click', () => {
+        const dist = camera.position.distanceTo(controls.target);
+        const y = camera.position.y;
+        const horizDist = Math.sqrt(Math.max(1, dist * dist - y * y));
+        tweenCameraTo(
+          new THREE.Vector3(controls.target.x, y, controls.target.z + horizDist),
+          controls.target.clone()
+        );
+        showToast('視角已對齊正北方 (N)');
+      });
+
+      // Search & Quick Select
+      document.getElementById('quick-parcel-select').addEventListener('change', (e) => {
+        if (e.target.value) selectParcel(e.target.value, true);
+      });
+
+      document.getElementById('parcel-search-input').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          const q = e.target.value.trim();
+          if (!q) return;
+
+          // Check if user searched a road name
+          const roadHit = ROADS_DATA.find((r) => r.name.includes(q) && r.labelPos);
+          if (roadHit) {
+            const [rx, , rz] = roadHit.labelPos;
+            tweenCameraTo(new THREE.Vector3(rx + 45, 72, rz + 55), new THREE.Vector3(rx, 0, rz));
+            showToast(`已定位至「${roadHit.name}」(路寬 ${roadHit.width}m)`, 'success');
+            return;
+          }
+
+          // Otherwise search parcels by ID, section, zoning, or building use
+          const found = appState.parcels.find(
+            (p) =>
+              p.id.includes(q) ||
+              p.section.includes(q) ||
+              p.zoning.includes(q) ||
+              p.building.use.includes(q)
+          );
+          if (found) {
+            selectParcel(found.id, true);
+            showToast(`已定位至 ${found.section} ${found.id} 地號`, 'success');
+          } else {
+            showToast(`找不到符合「${q}」的地號或道路`, 'warn');
+          }
+        }
+      });
+
+      // Mobile Left Drawer
+      document.getElementById('btn-toggle-left').addEventListener('click', () => {
+        document.getElementById('left-panel').classList.remove('-translate-x-[115%]');
+      });
+      document.getElementById('btn-close-left').addEventListener('click', () => {
+        document.getElementById('left-panel').classList.add('-translate-x-[115%]');
+      });
+
+      // Layer Toggles
+      document.getElementById('layer-buildings').addEventListener('change', (e) => {
+        appState.layers.buildings = e.target.checked;
+        parcelObjectsMap.forEach((obj) => {
+          obj.buildingGroup.visible = e.target.checked && appState.layers.buildingOpacity > 0;
+        });
+      });
+
+      document.getElementById('building-opacity-slider').addEventListener('input', (e) => {
+        const val = Number(e.target.value);
+        appState.layers.buildingOpacity = val / 100;
+        document.getElementById('building-opacity-val').textContent = `${val}%`;
+
+        parcelObjectsMap.forEach((obj) => {
+          obj.buildingGroup.visible = appState.layers.buildings && val > 0;
+          obj.buildingMaterials.forEach((mat) => {
+            mat.opacity = val / 100;
+            mat.depthWrite = val > 65;
+          });
+        });
+      });
+
+      document.getElementById('layer-zoning').addEventListener('change', (e) => {
+        appState.layers.zoning = e.target.checked;
+        parcelObjectsMap.forEach((obj) => {
+          obj.zoningMesh.visible = e.target.checked;
+        });
+      });
+
+      document.getElementById('layer-cadastral').addEventListener('change', (e) => {
+        appState.layers.cadastral = e.target.checked;
+        parcelObjectsMap.forEach((obj) => {
+          obj.borderLine.visible = e.target.checked;
+          obj.labelEntry.el.style.display = e.target.checked ? 'block' : 'none';
+        });
+      });
+
+      document.getElementById('layer-roads').addEventListener('change', (e) => {
+        appState.layers.roads = e.target.checked;
+        roadObjectsGroup.visible = e.target.checked;
+        projectedLabels.forEach((item) => {
+          if (item.type === 'road') {
+            item.el.style.display = e.target.checked ? 'block' : 'none';
+          }
+        });
+        if (e.target.checked && appState.selectedParcelId) {
+          const obj = parcelObjectsMap.get(appState.selectedParcelId);
+          if (obj) renderParcelDimensions3D(obj.data);
+        } else {
+          clearDimensions3D();
+        }
+      });
+
+      // Development Filter Buttons
+      document.querySelectorAll('.filter-zoning-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.filter-zoning-btn').forEach((b) => {
+            b.className = 'filter-zoning-btn py-1.5 px-2 rounded-lg text-[11px] font-medium bg-slate-800/85 text-slate-300 hover:bg-slate-700';
+          });
+          btn.className = 'filter-zoning-btn py-1.5 px-2 rounded-lg text-[11px] font-semibold bg-sky-500 text-white shadow';
+          appState.filters.zoning = btn.dataset.zoning;
+          applyFilters();
+        });
+      });
+
+      document.querySelectorAll('.filter-frontage-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.filter-frontage-btn').forEach((b) => {
+            b.className = 'filter-frontage-btn py-1.5 rounded-lg text-[11px] font-medium bg-slate-800/85 text-slate-300 hover:bg-slate-700';
+          });
+          btn.className = 'filter-frontage-btn py-1.5 rounded-lg text-[11px] font-semibold bg-sky-500 text-white';
+          appState.filters.minFrontage = Number(btn.dataset.frontage);
+          applyFilters();
+        });
+      });
+
+      document.querySelectorAll('.filter-road-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.filter-road-btn').forEach((b) => {
+            b.className = 'filter-road-btn py-1.5 rounded-lg text-[11px] font-medium bg-slate-800/85 text-slate-300 hover:bg-slate-700';
+          });
+          btn.className = 'filter-road-btn py-1.5 rounded-lg text-[11px] font-semibold bg-sky-500 text-white';
+          appState.filters.minRoadWidth = Number(btn.dataset.road);
+          applyFilters();
+        });
+      });
+
+      document.getElementById('filter-corner-only').addEventListener('change', (e) => {
+        appState.filters.cornerOnly = e.target.checked;
+        applyFilters();
+      });
+
+      document.getElementById('btn-reset-filter').addEventListener('click', () => {
+        appState.filters = { zoning: 'ALL', minFrontage: 0, minRoadWidth: 0, cornerOnly: false };
+        document.getElementById('filter-corner-only').checked = false;
+        document.querySelectorAll('.filter-zoning-btn').forEach((b, i) => {
+          b.className =
+            i === 0
+              ? 'filter-zoning-btn py-1.5 px-2 rounded-lg text-[11px] font-semibold bg-sky-500 text-white shadow'
+              : 'filter-zoning-btn py-1.5 px-2 rounded-lg text-[11px] font-medium bg-slate-800/85 text-slate-300 hover:bg-slate-700';
+        });
+        document.querySelectorAll('.filter-frontage-btn').forEach((b, i) => {
+          b.className =
+            i === 0
+              ? 'filter-frontage-btn py-1.5 rounded-lg text-[11px] font-semibold bg-sky-500 text-white'
+              : 'filter-frontage-btn py-1.5 rounded-lg text-[11px] font-medium bg-slate-800/85 text-slate-300 hover:bg-slate-700';
+        });
+        document.querySelectorAll('.filter-road-btn').forEach((b, i) => {
+          b.className =
+            i === 0
+              ? 'filter-road-btn py-1.5 rounded-lg text-[11px] font-semibold bg-sky-500 text-white'
+              : 'filter-road-btn py-1.5 rounded-lg text-[11px] font-medium bg-slate-800/85 text-slate-300 hover:bg-slate-700';
+        });
+        applyFilters();
+        showToast('已清除所有開發篩選條件');
+      });
+
+      // GeoJSON Import & Export
+      document.getElementById('geojson-file-input').addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          try {
+            importGeoJSONObject(JSON.parse(ev.target.result));
+          } catch (err) {
+            showToast('檔案非有效的 JSON / GeoJSON 格式', 'warn');
+          }
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+      });
+
+      document.getElementById('btn-export-geojson').addEventListener('click', exportCurrentParcelsGeoJSON);
+
+      // Right Drawer Controls
+      document.getElementById('btn-close-right').addEventListener('click', deselectParcel);
+
+      document.getElementById('toggle-industrial-bonus').addEventListener('change', (e) => {
+        appState.bonuses.industrial20 = e.target.checked;
+        const obj = parcelObjectsMap.get(appState.selectedParcelId);
+        if (obj) recalculateFloorArea(obj.data);
+      });
+
+      document.getElementById('toggle-renewal-bonus').addEventListener('change', (e) => {
+        appState.bonuses.renewal30 = e.target.checked;
+        const obj = parcelObjectsMap.get(appState.selectedParcelId);
+        if (obj) recalculateFloorArea(obj.data);
+      });
+
+      document.getElementById('btn-focus-parcel').addEventListener('click', () => {
+        if (appState.selectedParcelId) selectParcel(appState.selectedParcelId, true);
+      });
+
+      document.getElementById('btn-copy-report').addEventListener('click', () => {
+        const obj = parcelObjectsMap.get(appState.selectedParcelId);
+        if (!obj) return;
+        const p = obj.data;
+        const frontagesStr = p.frontages
+          .map((f) => `${f.roadName}(路寬${f.roadWidth}m) 面寬 ${f.width}m`)
+          .join(' / ');
+        const text = [
+          `【新北市三重區光復路周邊・土地開發評估摘要】`,
+          `地段地號：新北市三重區 ${p.section} ${p.id} 地號`,
+          `土地面積：${p.areaSqm} ㎡ (${p.areaPing} 坪)`,
+          `使用分區：${p.zoning}（建蔽率 ${p.bcr}% / 基準容積率 ${p.far}%）`,
+          `臨路條件：${frontagesStr}（平均深度 ${p.avgDepth}m）`,
+          `現況建物：${p.building.use}（地上 ${p.building.floors} 層）`,
+          `評估建議：${p.building.devNote}`
+        ].join('\n');
+
+        const tempArea = document.createElement('textarea');
+        tempArea.value = text;
+        document.body.appendChild(tempArea);
+        tempArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(tempArea);
+        showToast('已複製宗地開發評估摘要至剪貼簿！', 'success');
+      });
+    }
+
+    /**
+     * ============================================================================
+     * Vector3.project(camera) Label Projection Updater & Render Loop
+     * ============================================================================
+     */
+
+    const projTempVec = new THREE.Vector3();
+
+    function updateProjectedLabels() {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      const camDist = camera.position.distanceTo(controls.target);
+
+      for (let i = 0; i < projectedLabels.length; i++) {
+        const item = projectedLabels[i];
+
+        // Respect layer visibility toggles
+        if (item.type === 'parcel' && !appState.layers.cadastral) {
+          item.el.style.opacity = '0';
+          continue;
+        }
+        if (item.type === 'road' && !appState.layers.roads) {
+          item.el.style.opacity = '0';
+          continue;
+        }
+
+        // LOD: Hide non-selected parcel IDs when zoomed very far out to keep map clean
+        if (item.type === 'parcel' && camDist > 260 && item.parcelId !== appState.selectedParcelId) {
+          item.el.style.opacity = '0';
+          continue;
+        }
+
+        projTempVec.copy(item.worldPos).project(camera);
+
+        // Behind camera check
+        if (projTempVec.z > 1) {
+          item.el.style.opacity = '0';
+          continue;
+        }
+
+        const x = (projTempVec.x * 0.5 + 0.5) * width;
+        const y = (-(projTempVec.y * 0.5) + 0.5) * height;
+
+        // Off-screen margin culling
+        if (x < -120 || x > width + 120 || y < -60 || y > height + 60) {
+          item.el.style.opacity = '0';
+          continue;
+        }
+
+        item.el.style.opacity = '1';
+        item.el.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) translate(-50%, -50%)`;
+      }
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      if (cameraTween) {
+        const elapsed = performance.now() - cameraTween.startTime;
+        const t = Math.min(1, elapsed / cameraTween.duration);
+        const ease = 1 - Math.pow(1 - t, 3);
+
+        camera.position.lerpVectors(cameraTween.startPos, cameraTween.endPos, ease);
+        controls.target.lerpVectors(cameraTween.startTarget, cameraTween.endTarget, ease);
+
+        if (t >= 1) cameraTween = null;
+      }
+
+      controls.update();
+
+      // Update dynamic compass needle
+      const dx = camera.position.x - controls.target.x;
+      const dz = camera.position.z - controls.target.z;
+      const azimuthDeg = (Math.atan2(dx, dz) * 180) / Math.PI;
+      const needle = document.getElementById('compass-needle');
+      if (needle) needle.style.transform = `rotate(${-azimuthDeg}deg)`;
+
+      // Sync crisp HTML labels with 3D scene
+      updateProjectedLabels();
+
+      renderer.render(scene, camera);
+    }
+
+    window.onload = function () {
+      initScene();
+      animate();
+    };
+  </script>
+</body>
+</html>
